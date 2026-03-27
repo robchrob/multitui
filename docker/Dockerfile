@@ -40,17 +40,18 @@ WORKDIR /home/dev
 
 RUN npm config set prefix /home/dev/.npm-global
 
-ENV PATH="/home/dev/.npm-global/bin:/usr/local/bin:${PATH}"
-RUN echo 'export PATH="/home/dev/.npm-global/bin:/usr/local/bin:${PATH}"' >> /home/dev/.bashrc
+ENV PATH="/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
+RUN echo 'export PATH="/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
 
-RUN npm install -g opencode-ai@latest && \
+RUN curl -fsSL https://opencode.ai/install | bash && \
     npm install -g \
       @modelcontextprotocol/server-memory \
       @modelcontextprotocol/server-sequential-thinking
 
+RUN hash -r
+
 # OpenCode configuration
-ENV ANTHROPIC_API_KEY="" \
-    OPENCODE_CONFIG_DIR=/workspace/.opencode \
+ENV OPENCODE_CONFIG_DIR=/workspace/.opencode \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
 USER root

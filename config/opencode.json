@@ -1,25 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "zai-glm-4.5",
-  "small_model": "zai-glm-4.5",
-  "provider": {
-    "litellm": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "LiteLLM",
-      "options": {
-        "baseURL": "http://host.docker.internal:4000/v1"
-      },
-      "models": {
-        "zai-glm-4.5": {
-          "name": "zAI-GLM-4.5",
-          "limit": {
-            "context": 128000,
-            "output": 128000
-          }
-        }
-      }
-    }
-  },
+  "model": "opencode/minimax-m2.5-free",
   "permission": {
     "bash": {
       "*": "ask",
