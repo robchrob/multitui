@@ -15,7 +15,7 @@
 # Existing project (no submodule yet):
 #   cd my-project
 #   _attach
-#   _bootstrap
+#   _bootstrap "This is a monorepo, look into /packages"
 #   _start
 #
 # Cloned project (already has agent/):
@@ -146,7 +146,7 @@ _attach() {
     echo "agent/ already exists"
   fi
   source "$PWD/$_AGENT_DIR/.shell-functions.sh"
-  echo "Next: _init [\"stack description\"]  or  _bootstrap"
+  echo "Next: _init [\"stack description\"]  or  _bootstrap [\"instruction\"]"
 }
 
 _scaffold() {
@@ -190,6 +190,7 @@ _init() {
 }
 
 _bootstrap() {
+  local BOOTSTRAP_MSG="${1:-}"
   local N="$(basename "$PWD")"
 
   if [[ ! -d "$_AGENT_DIR" ]]; then
@@ -201,7 +202,7 @@ _bootstrap() {
 
   if _has_image; then
     echo "Analyzing project with OpenCode..."
-    _run_opencode "$(_gen_prompt_bootstrap "$N")"
+    _run_opencode "$(_gen_prompt_bootstrap "$N" "$BOOTSTRAP_MSG")"
     echo ""
     echo "Generated. Check:"
     echo "  AGENTS.md            — project context for OpenCode"
@@ -336,19 +337,25 @@ PROMPT
 }
 
 _gen_prompt_bootstrap() {
-  local name="$1"
+  local name="$1" msg="$2"
   cat <<PROMPT
+${msg:+USER INSTRUCTION: $msg
+}
 Analyze this existing project called "$name" and generate MultiTUI config for it.
 
+## Your execution environment
+You are inside a Docker container with OpenCode + Docker CLI.
+NO language runtimes exist here. ALL code execution uses DooD (Docker-out-of-Docker):
+  docker run --rm -v \$PROJECT_ROOT:/app -w /app <image> <cmd>
+  docker compose up
+
 ## Runtime conventions
-Apply these precisely when generating Dockerfile and commands:
+Apply these precisely for known stacks, or follow their spirit for others:
 
 ### JavaScript/TypeScript
 - Package manager: bun. Check for bun.lock or bun.lockb to confirm.
 - Base image: imbios/bun-node:latest-slim
-  (Vinxi/TanStack Start needs Node internally — pure oven/bun will fail)
 - HMR: add server.watch.usePolling=true to vite.config if not present
-  (bun --watch doesn't receive Docker volume mount filesystem events)
 - Cache volume: bun_cache → /root/.bun/install/cache
 
 ### Python
@@ -358,79 +365,56 @@ Apply these precisely when generating Dockerfile and commands:
 - Required env: UV_LINK_MODE=copy, UV_COMPILE_BYTECODE=1, UV_PYTHON_DOWNLOADS=never
 - Cache volume: uv_cache → /root/.cache/uv
 
-## Step 1 — discover the project
-Run these before reading any file:
+### Other Stacks (Go, Rust, Ruby, etc.)
+If the stack is NOT JS or Python, be flexible but stick to DooD best practices:
+- Use *-slim or alpine base images.
+- WORKDIR /app.
+- Do NOT use COPY in the Dockerfile (it's volume-mounted during dev).
+- Define named cache volumes for the language's package manager (e.g., GOPATH, cargo registry).
+- All commands in AGENTS.md must be 'docker compose run' or 'docker run'.
 
+## Step 1 — discover the project
+Run these to understand the structure:
+
+  # Full tree excluding junk
+  find . -maxdepth 3 -not -path '*/.*' -not -path './node_modules/*' -not -path './agent/*'
+
+  # Look for manifests, docs, and entry points
   find . -maxdepth 3 \
     -not -path './.git/*' \
     -not -path './node_modules/*' \
-    -not -path './.venv/*' \
-    -not -path './dist/*' -not -path './build/*' -not -path './.next/*' \
     -not -path './agent/*' \
-    \( -name 'package.json' -o -name 'bun.lock' -o -name 'bun.lockb' \
-       -o -name 'pyproject.toml' -o -name 'requirements*.txt' -o -name 'uv.lock' \
+    \( -name 'package.json' -o -name 'bun.lock*' -o -name 'pyproject.toml' \
+       -o -name 'requirements*.txt' -o -name 'uv.lock' -o -name '*.md' \
+       -o -name 'go.mod' -o -name 'Cargo.toml' -o -name 'Gemfile' \
        -o -name 'Dockerfile*' -o -name 'docker-compose*.yml' \
-       -o -name '.env.example' -o -name 'vite.config.*' -o -name 'app.config.*' \) \
-    -type f | sort
-
-  find . -maxdepth 4 \
-    -not -path './.git/*' \
-    -not -path './node_modules/*' \
-    -not -path './.venv/*' \
-    -not -path './dist/*' -not -path './build/*' -not -path './.next/*' \
-    -not -path './agent/*' \
-    \( -name 'index.ts' -o -name 'index.tsx' -o -name 'index.js' \
-       -o -name 'main.ts' -o -name 'main.tsx' -o -name 'main.py' \
-       -o -name 'app.ts' -o -name 'app.tsx' -o -name 'app.py' \
-       -o -name 'server.ts' -o -name 'server.js' \
-       -o -name '__main__.py' -o -name '__init__.py' \) \
+       -o -name 'vite.config.*' -o -name 'app.config.*' \) \
     -type f | sort
 
 Reading priority:
-  1. All manifests found (package.json, pyproject.toml, uv.lock, bun.lock, etc.)
-  2. Existing Dockerfile and docker-compose.yml
-  3. vite.config.* and app.config.* — reveals framework (Vite SPA vs TanStack Start vs Vinxi)
-  4. README.md
-  5. .env.example
-  6. All entry points found
-  7. Up to 4 source files chosen for architectural signal: route definitions,
-     schema files, or DI/config setup — not leaf implementation files
+  1. All manifests found (package.json, pyproject.toml, go.mod, etc.)
+  2. Any markdown files (README.md, details.md, etc.) to understand the context
+  3. Existing Dockerfile and docker-compose.yml
+  4. Entry points (main.ts, main.go, app.py, index.tsx, etc.)
 
 ## Step 2 — resolve stack with context7
-With exact versions known, fetch docs for major deps (skip trivial utils):
-  - Skip resolve-library-id for known IDs (/vitejs/vite, /tanstack/router, etc.)
-  - Targeted queries: "migration from vX", "Docker setup", "current CLI commands"
-  - Max 3-4 libs
+With exact versions known, fetch docs for major dependencies.
 
 ## Step 3 — generate files
 
 ### AGENTS.md
-Only project-specific facts. Include:
-
+Include:
   # [project name]
   [one-line description]
-
   ## Stack
-  [detected framework + exact versions, key deps]
-
+  [Detected stack + versions]
   ## DooD Commands
-  [exact runnable commands — dev, test, build, lint, add dep.
-   Use service names from existing docker-compose.yml if present]
-
+  [Exact runnable commands — dev, test, build, lint, add dep]
   ## Structure
-  [detected dirs and purpose, one line each]
-
   ## context7 library IDs
-  [resolved IDs for main libs so future sessions skip resolve-library-id]
 
 ### Dockerfile (ONLY if none exists)
-- Apply runtime conventions above for the detected stack
-- WORKDIR /app, no COPY (volume-mounted)
-- CMD bound to 0.0.0.0
-
 ### docker-compose.yml (ONLY if none exists)
-- Volume mount + correct named cache volume for detected stack
-- Port mappings, required services
 
 Do NOT overwrite existing Dockerfile or docker-compose.yml.
 Write files directly. No explanation.
