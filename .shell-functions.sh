@@ -2,7 +2,7 @@
 # MultiTUI — OpenCode shell functions
 #
 # First-time setup (once):
-#   git clone https://github.com/anomalyco/multitui.git ~/tools/multitui
+#   git clone https://github.com/robchrob/multitui.git ~/tools/multitui
 #   source ~/tools/multitui/.shell-functions.sh   # add to ~/.bashrc
 #   _build
 #
@@ -134,7 +134,7 @@ GI
 }
 
 _attach() {
-  local REMOTE="${1:-https://github.com/anomalyco/multitui.git}"
+  local REMOTE="${1:-https://github.com/robchrob/multitui.git}"
   [[ ! -d .git ]] && git init
   if [[ ! -d "$_AGENT_DIR" ]]; then
     git submodule add "$REMOTE" "$_AGENT_DIR" 2>/dev/null || true
