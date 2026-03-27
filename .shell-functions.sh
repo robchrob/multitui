@@ -26,6 +26,7 @@
 
 _MULTITUI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _AGENT_DIR="agent"
+_OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
 
 _container_name() {
   echo "mtui-$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
@@ -95,6 +96,7 @@ _start() {
     -v /var/run/docker.sock:/var/run/docker.sock
     -v "$HOME/.ssh":/home/dev/.ssh:ro
     -e OPENROUTER_API_KEY
+    -e OPENCODE_DEFAULT_MODEL="$_OPENCODE_DEFAULT_MODEL"
     -e GITHUB_TOKEN -e GITHUB_KEY -e GITHUB_USER
     -e EXA_API_KEY
     -e PROJECT_ROOT="$PROJ_DIR"
@@ -106,7 +108,7 @@ _start() {
     docker run "${FLAGS[@]}" multitui bash
   else
     docker run "${FLAGS[@]}" multitui \
-      bash -lc "export PATH='/home/dev/.opencode/bin:$PATH' && cd '$PROJ_DIR' && opencode"
+      bash -lc "export PATH='/home/dev/.opencode/bin:$PATH' && cd '$PROJ_DIR' && opencode --model \"$OPENCODE_DEFAULT_MODEL\""
   fi
 }
 
@@ -236,11 +238,12 @@ _run_opencode() {
     --group-add "$gid" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -e OPENROUTER_API_KEY \
+    -e OPENCODE_DEFAULT_MODEL="$_OPENCODE_DEFAULT_MODEL" \
     -e GITHUB_TOKEN \
     -e EXA_API_KEY \
     -e PROJECT_ROOT="$proj_dir" \
     -w "$proj_dir" \
-    multitui bash -lc 'export PATH="/home/dev/.opencode/bin:$PATH" && opencode run "$(cat /tmp/prompt.txt)"'
+    multitui bash -lc 'export PATH="/home/dev/.opencode/bin:$PATH" && opencode --model "$OPENCODE_DEFAULT_MODEL" run "$(cat /tmp/prompt.txt)"'
   rm -f "$prompt_file"
 }
 
