@@ -40,8 +40,8 @@ WORKDIR /home/dev
 
 RUN npm config set prefix /home/dev/.npm-global
 
-ENV PATH="/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
-RUN echo 'export PATH="/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
+ENV PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
+RUN echo 'export PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
 
 RUN curl -fsSL https://opencode.ai/install | bash && \
     npm install -g \
