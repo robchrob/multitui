@@ -57,8 +57,8 @@ _start() {
     echo "Error: Docker daemon is not running or not accessible" >&2
     return 1
   fi
-  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    echo "Error: ANTHROPIC_API_KEY is not set" >&2
+  if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+    echo "Error: OPENROUTER_API_KEY is not set" >&2
     return 1
   fi
   local MODE="${1:-auto}"
@@ -94,7 +94,7 @@ _start() {
     --group-add "$DOCKER_GID"
     -v /var/run/docker.sock:/var/run/docker.sock
     -v "$HOME/.ssh":/home/dev/.ssh:ro
-    -e ANTHROPIC_API_KEY
+    -e OPENROUTER_API_KEY
     -e GITHUB_TOKEN -e GITHUB_KEY -e GITHUB_USER
     -e EXA_API_KEY
     -e PROJECT_ROOT="$PROJ_DIR"
@@ -106,7 +106,7 @@ _start() {
     docker run "${FLAGS[@]}" multitui bash
   else
     docker run "${FLAGS[@]}" multitui \
-      bash -lc "cd '$PROJ_DIR' && opencode"
+      bash -lc "export PATH='/home/dev/.opencode/bin:$PATH' && cd '$PROJ_DIR' && opencode"
   fi
 }
 
@@ -134,7 +134,7 @@ GI
 }
 
 _attach() {
-  local REMOTE="${1:-https://github.com/robchrob/multitui.git}"
+  local REMOTE="${1:-git@github.com:robchrob/multitui.git}"
   [[ ! -d .git ]] && git init
   if [[ ! -d "$_AGENT_DIR" ]]; then
     git submodule add "$REMOTE" "$_AGENT_DIR" 2>/dev/null || true
@@ -235,12 +235,12 @@ _run_opencode() {
     -v "$_MULTITUI_DIR/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro \
     --group-add "$gid" \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -e ANTHROPIC_API_KEY \
+    -e OPENROUTER_API_KEY \
     -e GITHUB_TOKEN \
     -e EXA_API_KEY \
     -e PROJECT_ROOT="$proj_dir" \
     -w "$proj_dir" \
-    multitui bash -lc 'opencode run "$(cat /tmp/prompt.txt)"'
+    multitui bash -lc 'export PATH="/home/dev/.opencode/bin:$PATH" && opencode run "$(cat /tmp/prompt.txt)"'
   rm -f "$prompt_file"
 }
 
