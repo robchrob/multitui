@@ -12,7 +12,7 @@ Boutique Synchronize three documents for milestone-based project management.
 **changelog.md** - Completed releases (append-only)
 
 ## Commands
-Prefix with `magic` (e.g., `magic init`, `magic status`)
+Prefix with `magic` (e.g., `magic init`, `magic status`) - this is command in text for model, _NOT_ a CLI tool `magic`!
 
 - `init <current> <target> <objectives>` - Analyze project, incorporate existing deferred items, create versioned milestones (feature complete, atomic and with clear definition of done), generate/update all three files. DO NOT START WORK, ONLY CREATE FULL DETAILED PLAN and TASKS!
 - `start [next|<version>]` - Begin work on next or specified version
