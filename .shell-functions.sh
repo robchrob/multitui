@@ -135,6 +135,19 @@ GI
   fi
 }
 
+_render_template() {
+  local file="$1"
+  local content
+  content="$(cat "$file")"
+  shift
+  while [[ $# -gt 0 ]]; do
+    local var="${1%%=*}" val="${1#*=}"
+    content="${content//\$\{$var\}/$val}"
+    shift
+  done
+  echo "$content"
+}
+
 _attach() {
   local REMOTE="${1:-git@github.com:robchrob/multitui.git}"
   [[ ! -d .git ]] && git init
@@ -250,195 +263,20 @@ _run_opencode() {
 
 _gen_prompt_init() {
   local name="$1" stack="$2"
-  cat <<PROMPT
-You are setting up a NEW EMPTY project.
-Project name: "$name"
-Stack: $stack
-
-## Your execution environment
-You are inside a Docker container with OpenCode + Docker CLI.
-NO language runtimes exist here. ALL code execution uses DooD:
-  docker run --rm -v \$PROJECT_ROOT:/app -w /app <image> <cmd>
-  docker compose up
-\$PROJECT_ROOT contains the absolute project path on the host.
-
-## Runtime conventions
-This project uses specific runtimes — apply them precisely:
-
-### JavaScript/TypeScript projects
-- Package manager: bun (never npm/yarn/pnpm)
-- Runtime base image: imbios/bun-node:latest-slim
-  (required for Vinxi/TanStack Start: Vinxi's dev server needs Node internally
-   even when using bun as package manager — pure oven/bun image will fail)
-- Lockfile: bun.lock (not bun.lockb, changed in bun v1.2)
-- Dev scripts: bun run dev / bun run build / bun run test
-- HMR in Docker: Vite polling required — vite.config must include:
-    server: { watch: { usePolling: true }, host: true }
-  (bun --watch / --hot don't receive filesystem events from Docker volume mounts)
-- Named cache volume: bun_cache → /root/.bun/install/cache
-
-### Python projects
-- Package manager: uv (never pip directly)
-- Base image: python:3.13-slim with uv binary copied in:
-    COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-- Required env vars in Dockerfile:
-    ENV UV_LINK_MODE=copy        # symlinks break on volume mounts
-    ENV UV_COMPILE_BYTECODE=1    # faster startup
-    ENV UV_PYTHON_DOWNLOADS=never
-- Dev commands: uv run <script> / uv run pytest / uv sync
-- Named cache volume: uv_cache → /root/.cache/uv
-
-## Step 1 — resolve library versions with context7
-Use context7 for the framework and its 2-3 most version-sensitive dependencies.
-Skip resolve-library-id if you know the ID (e.g. /vitejs/vite, /tanstack/router,
-/drizzle-team/drizzle-orm, /facebook/react). Use targeted queries:
-  "setup and config for [version]"
-  "breaking changes in [version]"
-  "correct vite.config / app.config for [version]"
-Use results to pin exact versions in the Dockerfile and dependency files.
-
-## Step 2 — generate these files
-
-### AGENTS.md
-Only project-specific facts. Include:
-
-  # [project name]
-  [one-line description]
-
-  ## Stack
-  [framework + exact versions from context7, key dependencies]
-
-  ## DooD Commands
-  [exact docker compose commands for: dev, test, build, lint, add dep]
-
-  ## Structure
-  [dirs and their purpose — only relevant once project has files]
-
-  ## context7 library IDs
-  [resolved IDs so future sessions skip resolve-library-id, e.g.:
-   - Vite: /vitejs/vite
-   - TanStack Start: /tanstack/start
-   - Drizzle: /drizzle-team/drizzle-orm]
-
-### Dockerfile
-- Use the runtime conventions above exactly
-- WORKDIR /app, no COPY (volume-mounted)
-- Include the HMR polling config instruction comment if JS project
-- CMD bound to 0.0.0.0
-
-### docker-compose.yml
-- Service using the Dockerfile
-- Volume: \${PROJECT_ROOT:-.}:/app
-- Named cache volume per the conventions above
-- Port mappings, any backing services with healthchecks
-
-Write all files directly. No explanation. No markdown fences.
-PROMPT
+  _render_template "$_MULTITUI_DIR/defaults/templates/init.md" \
+    "PROJECT_NAME=$name" "STACK=$stack"
 }
 
 _gen_prompt_bootstrap() {
   local name="$1" msg="$2"
-  cat <<PROMPT
-${msg:+USER INSTRUCTION: $msg
-}
-Analyze this existing project called "$name" and generate MultiTUI config for it.
-
-## Your execution environment
-You are inside a Docker container with OpenCode + Docker CLI.
-NO language runtimes exist here. ALL code execution uses DooD (Docker-out-of-Docker):
-  docker run --rm -v \$PROJECT_ROOT:/app -w /app <image> <cmd>
-  docker compose up
-
-## Runtime conventions
-Apply these precisely for known stacks, or follow their spirit for others:
-
-### JavaScript/TypeScript
-- Package manager: bun. Check for bun.lock or bun.lockb to confirm.
-- Base image: imbios/bun-node:latest-slim
-- HMR: add server.watch.usePolling=true to vite.config if not present
-- Cache volume: bun_cache → /root/.bun/install/cache
-
-### Python
-- Package manager: uv. Check for uv.lock or pyproject.toml to confirm.
-- Base image: python:3.13-slim + uv binary:
-    COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-- Required env: UV_LINK_MODE=copy, UV_COMPILE_BYTECODE=1, UV_PYTHON_DOWNLOADS=never
-- Cache volume: uv_cache → /root/.cache/uv
-
-### Other Stacks (Go, Rust, Ruby, etc.)
-If the stack is NOT JS or Python, be flexible but stick to DooD best practices:
-- Use *-slim or alpine base images.
-- WORKDIR /app.
-- Do NOT use COPY in the Dockerfile (it's volume-mounted during dev).
-- Define named cache volumes for the language's package manager (e.g., GOPATH, cargo registry).
-- All commands in AGENTS.md must be 'docker compose run' or 'docker run'.
-
-## Step 1 — discover the project
-Run these to understand the structure:
-
-  # Full tree excluding junk
-  find . -maxdepth 3 -not -path '*/.*' -not -path './node_modules/*' -not -path './agent/*'
-
-  # Look for manifests, docs, and entry points
-  find . -maxdepth 3 \
-    -not -path './.git/*' \
-    -not -path './node_modules/*' \
-    -not -path './agent/*' \
-    \( -name 'package.json' -o -name 'bun.lock*' -o -name 'pyproject.toml' \
-       -o -name 'requirements*.txt' -o -name 'uv.lock' -o -name '*.md' \
-       -o -name 'go.mod' -o -name 'Cargo.toml' -o -name 'Gemfile' \
-       -o -name 'Dockerfile*' -o -name 'docker-compose*.yml' \
-       -o -name 'vite.config.*' -o -name 'app.config.*' \) \
-    -type f | sort
-
-Reading priority:
-  1. All manifests found (package.json, pyproject.toml, go.mod, etc.)
-  2. Any markdown files (README.md, details.md, etc.) to understand the context
-  3. Existing Dockerfile and docker-compose.yml
-  4. Entry points (main.ts, main.go, app.py, index.tsx, etc.)
-
-## Step 2 — resolve stack with context7
-With exact versions known, fetch docs for major dependencies.
-
-## Step 3 — generate files
-
-### AGENTS.md
-Include:
-  # [project name]
-  [one-line description]
-  ## Stack
-  [Detected stack + versions]
-  ## DooD Commands
-  [Exact runnable commands — dev, test, build, lint, add dep]
-  ## Structure
-  ## context7 library IDs
-
-### Dockerfile (ONLY if none exists)
-### docker-compose.yml (ONLY if none exists)
-
-Do NOT overwrite existing Dockerfile or docker-compose.yml.
-Write files directly. No explanation.
-PROMPT
+  _render_template "$_MULTITUI_DIR/defaults/templates/bootstrap.md" \
+    "PROJECT_NAME=$name" "USER_INSTRUCTION=$msg"
 }
 
 _write_fallback_agents_md() {
   local name="$1" stack="$2"
-  cat > AGENTS.md <<EOF
-# $name
-${stack:+$stack
-}
-## Stack
-[fill in: framework, key dependencies with exact versions]
-
-## DooD Commands
-[fill in: exact docker compose commands for dev, test, build, lint]
-
-## Structure
-[fill in: dirs and their purpose once project has files]
-
-## context7 library IDs
-[fill in after first session: /org/repo IDs for main libs]
-EOF
+  _render_template "$_MULTITUI_DIR/defaults/templates/fallback-agents-md.md" \
+    "PROJECT_NAME=$name" "STACK=$stack" > AGENTS.md
 }
 
 # ============================================================================
@@ -473,5 +311,5 @@ export -f _clean
 export -f _attach _init _bootstrap _scaffold
 export -f _run_opencode _write_fallback_agents_md
 export -f _gen_prompt_init _gen_prompt_bootstrap
-export -f _write_if_missing _append_gitignore
+export -f _write_if_missing _append_gitignore _render_template
 export -f _install_skills _install_commands
