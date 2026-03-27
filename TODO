@@ -1,3 +1,5 @@
 always allow #initialize magic versioning
 
 magic *
+
+We must append info about agent/AGENTS.md into .shell-functions when doing _init or _bootstrap
