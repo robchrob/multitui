@@ -9,6 +9,8 @@ YOU ARE HERE → multitui container (OpenCode + Docker CLI + git)
     → spawns runtime containers on HOST Docker daemon
 ```
 _Node.js in this container is for OpenCode internals. NOT for project code._
+The agent is also running inside docker, not on the host.
+So the "multitui container" (where I'm running) is itself inside Docker, and it has access to Docker to spawn more containers. So you should be using docker compose to run commands.
 
 ## Code Execution (always DooD)
 - One-off: `docker run --rm -v $PROJECT_ROOT:/app -w /app <image> <cmd>`
