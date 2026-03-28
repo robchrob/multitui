@@ -1,6 +1,15 @@
 You are setting up a NEW EMPTY project.
 Project name: "${PROJECT_NAME}"
-Stack: ${STACK}
+
+## Step 0 — Detect intent
+From the project name or user instruction, detect:
+- Language: JavaScript/TypeScript, Python, or Other
+- Framework: React, Vue, Svelte, FastAPI, Flask, Gin, etc.
+- Purpose: API, webapp, CLI tool, etc.
+
+Use tools to help:
+- Unfamiliar framework → deepwiki_ask_question to understand typical project structure
+- Need version-specific docs → context7_resolve-library-id + context7_query-docs
 
 ## Your execution environment
 You are inside a Docker container with OpenCode + Docker CLI.
@@ -34,6 +43,14 @@ This project uses specific runtimes — apply them precisely:
     ENV UV_PYTHON_DOWNLOADS=never
 - Dev commands: uv run <script> / uv run pytest / uv sync
 - Named cache volume: uv_cache → /root/.cache/uv
+
+### Other stacks (Go, Rust, Ruby, PHP, Elixir, etc.)
+Be flexible. Apply DooD best practices:
+- Use appropriate slim or alpine base image for the language
+- Use native package manager (go mod, cargo, gem, composer, mix, etc.)
+- WORKDIR /app, no COPY in Dockerfile (volume-mounted during dev)
+- Define named cache volumes for the language's package manager
+- CMD bound to 0.0.0.0
 
 ## Step 1 — resolve library versions with context7
 Use context7 for the framework and its 2-3 most version-sensitive dependencies.
