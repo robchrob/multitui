@@ -17,7 +17,7 @@ This project uses specific runtimes — apply them precisely:
 - Runtime base image: imbios/bun-node:latest-slim
   (required for Vinxi/TanStack Start: Vinxi's dev server needs Node internally
    even when using bun as package manager — pure oven/bun image will fail)
-- Lockfile: bun.lock (not bun.lockb, changed in bun v1.2)
+- Lockfile: bun.lock
 - Dev scripts: bun run dev / bun run build / bun run test
 - HMR in Docker: Vite polling required — vite.config must include:
     server: { watch: { usePolling: true }, host: true }

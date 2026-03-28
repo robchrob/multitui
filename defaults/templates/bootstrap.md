@@ -12,7 +12,7 @@ NO language runtimes exist here. ALL code execution uses DooD (Docker-out-of-Doc
 Apply these precisely for known stacks, or follow their spirit for others:
 
 ### JavaScript/TypeScript
-- Package manager: bun. Check for bun.lock or bun.lockb to confirm.
+- Package manager: bun. Check for bun.lock to confirm.
 - Base image: imbios/bun-node:latest-slim
 - HMR: add server.watch.usePolling=true to vite.config if not present
 - Cache volume: bun_cache → /root/.bun/install/cache
@@ -43,7 +43,7 @@ Run these to understand the structure:
     -not -path './.git/*' \
     -not -path './node_modules/*' \
     -not -path './agent/*' \
-    \( -name 'package.json' -o -name 'bun.lock*' -o -name 'pyproject.toml' \
+    \( -name 'package.json' -o -name 'bun.lock' -o -name 'pyproject.toml' \
        -o -name 'requirements*.txt' -o -name 'uv.lock' -o -name '*.md' \
        -o -name 'go.mod' -o -name 'Cargo.toml' -o -name 'Gemfile' \
        -o -name 'Dockerfile*' -o -name 'docker-compose*.yml' \

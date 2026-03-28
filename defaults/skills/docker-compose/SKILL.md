@@ -31,13 +31,19 @@ docker compose logs -f app
 
 **Always use `--rm` for one-off commands:**
 ```bash
-docker compose run --rm app npm test
-docker compose run --rm app python manage.py migrate
+# JavaScript/TypeScript - use bun run
+docker compose run --rm app bun run test
+docker compose run --rm app bun run build
+
+# Python - use uv run
+docker compose run --rm app "uv run pytest"
+docker compose run --rm app "uv run python manage.py migrate"
 ```
 
 **Use `-T` for non-interactive commands (cleaner output):**
 ```bash
-docker compose run -T app npm run build
+docker compose run -T app bun run build
+docker compose run -T app "uv run pytest"
 ```
 
 **Service discovery:** Services communicate via service names:
@@ -117,7 +123,7 @@ services:
       - .:/app
     environment:
       - NODE_ENV=development
-    command: npm run dev
+    command: bun run dev
 ```
 
 ### Resource Limits
