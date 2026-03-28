@@ -3,7 +3,7 @@
   "model": "opencode/minimax-m2.5-free",
   "permission": {
     "bash": {
-      "*": "ask",
+      "*": "allow",
       "git *": "allow",
       "npm *": "allow",
       "pnpm *": "allow",
@@ -80,7 +80,18 @@
     "write": "allow",
     "glob": "allow",
     "grep": "allow",
-    "list": "allow"
+    "list": "allow",
+    "patch": "allow",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "codesearch": "allow",
+    "task": "allow",
+    "skill": "allow",
+    "lsp": "allow",
+    "todowrite": "allow",
+    "todoread": "allow",
+    "external_directory": "deny",
+    "*": "allow"
   },
   "mcp": {
     "memory": {
