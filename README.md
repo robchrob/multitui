@@ -4,62 +4,35 @@ OpenCode generates your project's Dockerfile and uses DooD for all execution.
 
 ## Prerequisites
 - Docker running on host
-- `ANTHROPIC_API_KEY` set in environment
+- `OPENROUTER_API_KEY` set in environment (get one at openrouter.ai)
 
-## One-Time Setup
+## Quick Start
+
+### One-Time Setup
 ```bash
-# Clone multitui
-git clone https://github.com/anomalyco/multitui.git ~/tools/multitui
-
-# Add to ~/.bashrc
-cat >> ~/.bashrc << 'EOF'
-export ANTHROPIC_API_KEY="sk-ant-..."
-export GITHUB_TOKEN="ghp_..."   # optional
-source ~/tools/multitui/.shell-functions.sh
-EOF
-source ~/.bashrc
-
-# Build the image (once)
-_build
+# Clone and setup globally
+git clone https://github.com/anomalyco/multitui.git multitui
+cd multitui
+mtui setup
 ```
 
-## New Project
+### New Project
 ```bash
 mkdir my-app && cd my-app && git init
-
-# Add multitui as submodule at agent/
-_attach
-
-# Option A: tell it your stack — OpenCode generates Dockerfile + AGENTS.md + compose
-_init "React 19 + Vite + Tailwind 4, Python 3.14 + FastAPI backend"
-
-# Option B: blank scaffold — describe stack to OpenCode in first message
-_init
-
-# Start OpenCode
-_start
+mtui init "React 19 + Vite + Tailwind"
+mtui start
 ```
 
-## Existing Project (no submodule yet)
+### Existing Project
 ```bash
 cd my-project
-
-# Add multitui as submodule at agent/
-_attach
-
-# OpenCode reads your code, generates AGENTS.md + Dockerfile if missing
-_bootstrap
-
-# Start OpenCode
-_start
+mtui bootstrap "monorepo with packages/"
+mtui start
 ```
 
-## Cloned Project (already has agent/ submodule)
+### Resume Existing Project
 ```bash
-git clone --recurse-submodules git@github.com:you/project.git
-cd project
-source agent/.shell-functions.sh
-_start
+mtui start
 ```
 
 ## How It Works
@@ -69,7 +42,7 @@ _start
 │  OpenCode — reads/writes files directly                      │
 │  Docker CLI  — spawns project containers via DooD            │
 │  minimal alpine runtime                                       │
-│  Node.js is for OpenCode internals ONLY                      │
+│  Node.js is for OpenCode internals ONLY                     │
 │                                                             │
 │  To run project code:                                       │
 │    docker compose up                                        │
@@ -77,27 +50,44 @@ _start
 │    docker run --rm -v $PROJECT_ROOT:/app -w /app \          │
 │      node:22-alpine npm test                                │
 └──────────────────┬────────────────────────────────────────────┘
-                  │ host Docker socket (DooD)
+                   │ host Docker socket (DooD)
 ┌──────────────────▼────────────────────────────────────────────┐
 │ project container(s) (spawned by OpenCode)                    │
 │  Built from YOUR Dockerfile at project root                 │
 │  Have the actual runtimes (node, python, rust, etc.)        │
 │  Ports bind to host (localhost:3000, etc.)                  │
 │  Volume-mount: project files + named cache volumes          │
-└───────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
 ```
 
+## mtui Commands
+
+| Command | What |
+|---------|------|
+| `mtui setup` | Install/upgrade framework globally to ~/.multitui |
+| `mtui build` | Build the multitui Docker image |
+| `mtui init [stack]` | Scaffold new project, attach agent/, AI generates files |
+| `mtui bootstrap [instr]` | Analyze existing codebase, configure MultiTUI |
+| `mtui start [-p H:C]` | Start or resume OpenCode container |
+| `mtui clean` | Remove container for this project |
+| `mtui list` | List all MultiTUI containers on machine |
+| `mtui status` | Show health of current project |
+
+## Session Management
+- **Ctrl+Z** inside OpenCode → detaches (container keeps running)
+- **`mtui start`** → resumes existing container
+- **`mtui clean`** → removes container (start fresh)
+
 ## What Gets Generated
-`_init "stack"` and `_bootstrap` create:
+`mtui init "stack"` and `mtui bootstrap` create:
 
 | File | Purpose | Overwrites? |
 |------|---------|-------------|
-| `AGENTS.md` | Stack, commands, conventions | Yes (that's the point) |
+| `AGENTS.md` | Stack, commands, conventions | Yes |
 | `Dockerfile` | Dev runtime for project | Only if missing |
 | `docker-compose.yml` | Services + volume caching | Only if missing |
-| `opencode.json` | Config | Only if missing |
-| `.opencode/skills/` | (skills) | Only if missing |
-| `.opencode/commands/` | (custom commands) | Only if missing |
+| `.opencode/skills/` | Skills from agent/ | Only if missing |
+| `.opencode/commands/` | Commands from agent/ | Only if missing |
 
 ## Project Layout After Setup
 ```
@@ -105,45 +95,27 @@ my-project/
 ├── AGENTS.md              # Stack + commands (generated)
 ├── Dockerfile             # Dev runtime (generated)
 ├── docker-compose.yml     # Services + caching (generated)
-├── opencode.json          # Config
 ├── .opencode/
-│   ├── agents/
-│   ├── commands/          # (custom commands)
-│   ├── skills/            # (skills)
+│   ├── skills/            # Scaffolded from agent/
+│   └── commands/          # Scaffolded from agent/
 ├── agent/                 # MultiTUI submodule (READ-ONLY)
-│   ├── .shell-functions.sh
+│   ├── mtui               # CLI binary
 │   ├── docker/Dockerfile
 │   ├── defaults/
-│   ├── AGENTS.md
+│   │   ├── skills/
+│   │   ├── commands/
+│   │   └── templates/
+│   ├── config/opencode.json
 │   └── README.md
 └── [source code]
 ```
 
-## Commands
-| Command | What |
-|---------|------|
-| `_build` | Build multitui image (once) |
-| `_start [auto\|tty] [-p H:C]` | Start/resume OpenCode (Ctrl+Z to detach) |
-| `_attach [remote]` | Add agent/ submodule to current project |
-| `_init ["stack desc"]` | Scaffold new project, optional AI generation |
-| `_bootstrap` | Analyze existing project with AI |
-| `_clean` | Remove multitui container |
-
-## Session Management
-- **Ctrl+Z** inside OpenCode → detaches (container keeps running)
-- **`_start`** → resumes existing container
-- **`_clean`** → removes container (start fresh)
-
-## Slash Commands (in OpenCode)
-| Command | What |
-|---------|------|
-| `/clear` | Clear context between tasks |
-
 ## Config Hierarchy
-| File | Scope | Purpose |
-|------|-------|---------|
-| `agent/config/opencode.json` | Global | Single source of truth for all config |
-| `opencode.json` | Project | Config (inherited from global if missing) |
+
+| Location | Scope | Purpose |
+|----------|-------|---------|
+| `~/.config/opencode/opencode.json` | Global | User preferences |
+| `agent/config/opencode.json` | Global | Framework defaults (mounted into container) |
 | `AGENTS.md` | Project | Stack, commands, conventions |
 
-**Single Source of Truth**: `agent/config/opencode.json` contains the complete configuration. Project-level settings are automatically inherited from this file, ensuring no duplication and consistent configuration across all projects.
+The container mounts `agent/config/opencode.json` as the base config, providing MCP servers (memory, context7, exa, github, deepwiki) and permissions.

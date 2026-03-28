@@ -2,6 +2,24 @@ always allow #initialize magic versioning
 
 magic *
 
-We must append info about agent/AGENTS.md into .shell-functions when doing _init or _bootstrap
+- mtui binary replaces .shell-functions.sh ✓
+- mtui scaffolds .opencode/skills/ and .opencode/commands/ ✓
+- mtui uses templates for init/bootstrap ✓
 
-We must be flexible and aware of project files. It looks very powerful.
+Commands created (defaults/commands/):
+- run.md - Start dev server with SOTA auto-detection
+- test.md - Run tests with auto-detect framework
+- debug.md - Investigate errors
+
+Skills created (defaults/skills/):
+- docker-compose - DooD-aware compose patterns
+- container-debug - Shell, logs, inspection
+- magic-versioning - Already existed
+
+Auto-detection SOTA:
+- Lockfile priority: bun > pnpm > yarn > npm > uv > poetry > go > rust
+- Test framework: vitest > jest > pytest > go test > cargo test
+- Compose service: auto-detect from docker-compose.yml
+
+Open questions:
+- Should agent/AGENTS.md content be merged into project AGENTS.md?
