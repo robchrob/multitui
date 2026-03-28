@@ -19,6 +19,14 @@ C_DIM='\033[2m'
 _log() { echo -e "${C_BLUE}[mtui]${C_RESET} $1"; }
 _err() { echo -e "${C_RED}[✘] $1${C_RESET}" >&2; exit 1; }
 
+_warn_no_agent() {
+    if [[ ! -d "agent" ]]; then
+        echo -e "${C_YELLOW}[!] No agent/ submodule found in this directory.${C_RESET}"
+        echo -e "${C_YELLOW}    Run 'mtui init' or 'mtui bootstrap' to attach the agent first.${C_RESET}"
+        sleep 1
+    fi
+}
+
 _container_name() {
     echo "mtui-$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
 }
@@ -57,10 +65,6 @@ _scaffold() {
         local name="$(basename "$f" .md)"
         [[ ! -f ".opencode/commands/$name.md" ]] && cp "$f" ".opencode/commands/$name.md"
     done
-
-    if [[ ! -f .gitignore ]] || ! grep -qF "# MultiTUI" .gitignore; then
-        printf "\n# MultiTUI\nopencode.json\n.opencode/\n" >> .gitignore
-    fi
 }
 
 _run_opencode() {
@@ -76,7 +80,7 @@ _run_opencode() {
         -v /var/run/docker.sock:/var/run/docker.sock \
         -e OPENROUTER_API_KEY -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL" \
         -e GITHUB_TOKEN -e EXA_API_KEY -e PROJECT_ROOT="$PWD" \
-        multitui bash -lc 'export PATH="/home/dev/.opencode/bin:$PATH" && opencode --model "$OPENCODE_DEFAULT_MODEL" run "$(cat /tmp/prompt.txt)"'
+        multitui bash -c 'opencode --model "$OPENCODE_DEFAULT_MODEL" run "$(cat /tmp/prompt.txt)"'
 
     rm -f "$prompt_file"
 }
@@ -86,18 +90,12 @@ _run_opencode() {
 cmd_setup() {
     _log "Setting up MultiTUI globally in $MTUI_HOME..."
 
-    if [[ -d "docker" && -d "defaults" && "$PWD" != "$MTUI_HOME" ]]; then
-        _log "Dev mode detected. Copying $PWD to $MTUI_HOME..."
-        mkdir -p "$MTUI_HOME"
-        tar -cf - --exclude=.git . | tar -xf - -C "$MTUI_HOME"
+    if [[ ! -d "$MTUI_HOME" ]]; then
+        _log "Cloning framework..."
+        git clone "$REMOTE_REPO" "$MTUI_HOME"
     else
-        if [[ ! -d "$MTUI_HOME" ]]; then
-            _log "Cloning framework..."
-            git clone "$REMOTE_REPO" "$MTUI_HOME"
-        else
-            _log "Updating framework..."
-            git -C "$MTUI_HOME" pull
-        fi
+        _log "Updating framework..."
+        git -C "$MTUI_HOME" pull
     fi
 
     _log "Linking mtui to ~/.local/bin/mtui..."
@@ -105,41 +103,46 @@ cmd_setup() {
     chmod +x "$MTUI_HOME/mtui"
     ln -sf "$MTUI_HOME/mtui" "$HOME/.local/bin/mtui"
 
-    _log "Building Docker image..."
-    docker build -f "$MTUI_HOME/docker/Dockerfile" -t multitui "$MTUI_HOME/docker"
+    cmd_build
 
     echo -e "${C_GREEN}[✔] Setup complete! Run 'mtui' anywhere.${C_RESET}"
 }
 
 cmd_build() {
-    docker build -f "$MTUI_HOME/docker/Dockerfile" -t multitui "$MTUI_HOME/docker"
+    local no_cache=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-cache) no_cache="--no-cache" ;;
+            *) ;;
+        esac
+        shift
+    done
+    docker build $no_cache \
+        --build-arg HOST_UID="$(id -u)" \
+        --build-arg HOST_GID="$(id -g)" \
+        -f "$MTUI_HOME/docker/Dockerfile" \
+        -t multitui "$MTUI_HOME/docker"
     echo -e "${C_GREEN}[✔] Build complete.${C_RESET}"
 }
 
 cmd_init() {
-    local stack="${1:-}" name="$(basename "$PWD")"
-    _attach; _scaffold
+    local name="$(basename "$PWD")"
 
-    if [[ -n "$stack" ]] && docker images -q multitui | grep -q .; then
-        _run_opencode "$(_render_template "agent/defaults/templates/init.md" "PROJECT_NAME=$name" "STACK=$stack")"
-        echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
-    else
-        _render_template "agent/defaults/templates/fallback-agents-md.md" "PROJECT_NAME=$name" "STACK=$stack" > AGENTS.md
-        echo -e "${C_GREEN}[✔] Scaffolded locally. Run 'mtui start'.${C_RESET}"
-    fi
+    docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
+
+    _attach; _scaffold
+    _run_opencode "$(cat "agent/defaults/templates/init.md")"
+    echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
 }
 
 cmd_bootstrap() {
     local instr="${1:-}" name="$(basename "$PWD")"
-    _attach; _scaffold
+    
+    docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
-    if docker images -q multitui | grep -q .; then
-        _run_opencode "$(_render_template "agent/defaults/templates/bootstrap.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
-        echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
-    else
-        _render_template "agent/defaults/templates/fallback-agents-md.md" "PROJECT_NAME=$name" "STACK=Unknown" > AGENTS.md
-        echo -e "${C_GREEN}[✔] Basic bootstrap done. Run 'mtui start'.${C_RESET}"
-    fi
+    _attach; _scaffold
+    _run_opencode "$(_render_template "agent/defaults/templates/bootstrap.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
+    echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
 }
 
 cmd_start() {
@@ -147,8 +150,22 @@ cmd_start() {
     [[ ! -d "agent" ]] && _err "No agent/ submodule found. Run 'mtui init' first."
 
     local cn="$(_container_name)"
+    local mode="auto"
+    local flags=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tty) mode="tty"; shift ;;
+            -p|--port) flags+=("-p" "$2"); shift 2 ;;
+            *) shift ;;
+        esac
+    done
 
     if docker ps -aq -f name="^/${cn}$" | grep -q .; then
+        local mounted="$(docker inspect "$cn" --format '{{.Config.WorkingDir}}' 2>/dev/null)"
+        if [[ "$mounted" != "$PWD" ]]; then
+            _err "Container $cn exists but belongs to a different path: $mounted\nRun 'mtui clean' first to remove it."
+        fi
         _log "Resuming $cn..."
         exec docker start -ai "$cn"
     fi
@@ -156,7 +173,7 @@ cmd_start() {
     docker images -q multitui | grep -q . || _err "No image. Run 'mtui build' first."
     _log "Starting OpenCode..."
 
-    local flags=(
+    flags+=(
         -it --name "$cn" --detach-keys="ctrl-z"
         -v "$PWD":"$PWD" -w "$PWD"
         -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro
@@ -164,14 +181,15 @@ cmd_start() {
         -v /var/run/docker.sock:/var/run/docker.sock
         -v "$HOME/.ssh":/home/dev/.ssh:ro
         -e OPENROUTER_API_KEY -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e GITHUB_TOKEN -e EXA_API_KEY -e PROJECT_ROOT="$PWD"
+        -e GITHUB_TOKEN -e GITHUB_KEY -e GITHUB_USER -e EXA_API_KEY
+        -e PROJECT_ROOT="$PWD"
     )
 
-    while [[ $# -gt 0 ]]; do
-        case "$1" in -p|--port) flags+=("-p" "$2"); shift 2 ;; *) shift ;; esac
-    done
-
-    exec docker run "${flags[@]}" multitui bash -lc "export PATH='/home/dev/.opencode/bin:\$PATH' && cd '$PWD' && opencode --model \"$OPENCODE_DEFAULT_MODEL\""
+    if [ "$mode" = "tty" ]; then
+        exec docker run "${flags[@]}" multitui bash
+    else
+        exec docker run "${flags[@]}" multitui bash -c "cd '$PWD' && opencode --model \"$OPENCODE_DEFAULT_MODEL\""
+    fi
 }
 
 cmd_clean() {
@@ -219,7 +237,7 @@ show_help() {
     echo ""
     echo -e "${C_BOLD}Global Commands:${C_RESET}"
     echo "  setup                 Install or update framework globally to ~/.multitui"
-    echo "  build                 Build the 'multitui' base Docker image"
+    echo "  build [--no-cache]    Build the 'multitui' base Docker image"
     echo "  list, ls              List all MultiTUI containers on this machine"
     echo ""
     echo -e "${C_BOLD}Project Commands:${C_RESET}"
@@ -244,9 +262,14 @@ shift
 case "$COMMAND" in
     setup)       cmd_setup "$@" ;;
     build)       cmd_build "$@" ;;
-    init)        cmd_init "$@" ;;
-    bootstrap)   cmd_bootstrap "$@" ;;
-    start)       cmd_start "$@" ;;
+    init|bootstrap|start)
+                _warn_no_agent
+                case "$COMMAND" in
+                    init)        cmd_init "$@" ;;
+                    bootstrap)   cmd_bootstrap "$@" ;;
+                    start)       cmd_start "$@" ;;
+                esac
+                ;;
     clean|stop)  cmd_clean ;;
     list|ls)     cmd_list ;;
     status)      cmd_status ;;

@@ -21,5 +21,12 @@ Auto-detection SOTA:
 - Test framework: vitest > jest > pytest > go test > cargo test
 - Compose service: auto-detect from docker-compose.yml
 
+Done:
+- Removed dev mode detection from cmd_setup
+- Added HOST_UID/HOST_GID to docker build (fixes file ownership)
+- Added path collision check in cmd_start
+- Added --tty debug mode
+- Added GITHUB_KEY and GITHUB_USER env vars
+
 Open questions:
 - Should agent/AGENTS.md content be merged into project AGENTS.md?

@@ -2,6 +2,12 @@ ${USER_INSTRUCTION:+USER INSTRUCTION: ${USER_INSTRUCTION}
 }
 Analyze this existing project called "${PROJECT_NAME}" and generate MultiTUI config for it.
 
+## MCP Tools to Use
+
+- **context7**: Get version-specific docs for detected frameworks (run resolve-library-id first, then query-docs)
+- **deepwiki**: If user mentions a known repo/stack pattern (e.g., "like T3 Stack"), query deepwiki to understand structure
+- **exa**: Search current best practices, troubleshooting, or common patterns for detected stack
+
 ## Your execution environment
 You are inside a Docker container with OpenCode + Docker CLI.
 NO language runtimes exist here. ALL code execution uses DooD (Docker-out-of-Docker):
