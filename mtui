@@ -158,15 +158,10 @@ _scaffold() {
 
 _run_opencode() {
     local prompt="$1"
-    local prompt_file
-    prompt_file="$(mktemp)"
-
-    printf '%s' "$prompt" > "$prompt_file"
 
     _log "Waking up AI to analyze..."
     docker run --rm \
         -v "$PWD":"$PWD" -w "$PWD" \
-        -v "$prompt_file":/tmp/prompt.txt:ro \
         -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro \
         --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)" \
         -v /var/run/docker.sock:/var/run/docker.sock \
@@ -175,9 +170,8 @@ _run_opencode() {
         -e GITHUB_TOKEN \
         -e EXA_API_KEY \
         -e PROJECT_ROOT="$PWD" \
-        multitui bash -lc 'opencode --model "$OPENCODE_DEFAULT_MODEL" run "$(cat /tmp/prompt.txt)"'
-
-    rm -f "$prompt_file"
+        multitui \
+        opencode --model "$OPENCODE_DEFAULT_MODEL" run "$prompt"
 }
 
 # --- Core Commands ---
@@ -355,7 +349,8 @@ Run 'mtui clean' first to remove it."
     if [[ "$mode" == "tty" ]]; then
         exec docker run "${flags[@]}" multitui bash
     else
-        exec docker run "${flags[@]}" multitui bash -lc 'opencode --model "$OPENCODE_DEFAULT_MODEL"'
+        exec docker run "${flags[@]}" multitui \
+            opencode --model "$OPENCODE_DEFAULT_MODEL"
     fi
 }
 
