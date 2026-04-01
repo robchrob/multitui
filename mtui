@@ -1,7 +1,8 @@
 #!/bin/bash
 # MultiTUI — Global CLI Orchestrator
 
-set -e
+set -Eeuo pipefail
+shopt -s nullglob
 
 MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="git@github.com:robchrob/multitui.git"
@@ -17,13 +18,16 @@ C_BLUE='\033[0;34m'
 C_BOLD='\033[1m'
 C_DIM='\033[2m'
 
+trap 'rc=$?; echo -e "${C_RED}[✘] error at line $LINENO: ${BASH_COMMAND}${C_RESET}" >&2; exit "$rc"' ERR
+
 _log() { echo -e "${C_BLUE}[mtui]${C_RESET} $1"; }
+_warn() { echo -e "${C_YELLOW}[!] $1${C_RESET}" >&2; }
 _err() { echo -e "${C_RED}[✘] $1${C_RESET}" >&2; exit 1; }
 
 _warn_no_agent() {
     if [[ ! -d "agent" ]]; then
-        echo -e "${C_YELLOW}[!] No agent/ submodule found in this directory.${C_RESET}"
-        echo -e "${C_YELLOW}    Run 'mtui init' or 'mtui bootstrap' to attach the agent first.${C_RESET}"
+        _warn "No agent/ submodule found in this directory."
+        _warn "Run 'mtui init' or 'mtui bootstrap' to attach the agent first."
         sleep 1
     fi
 }
@@ -33,111 +37,95 @@ _container_name() {
 }
 
 _render_template() {
-    local file="$1" content="$(cat "$1")"; shift
+    local file="$1"
+    [[ -r "$file" ]] || _err "Missing template: $file"
+
+    local content
+    content="$(cat "$file")"
+    shift
+
     while [[ $# -gt 0 ]]; do
-        local var="${1%%=*}" val="${1#*=}"
+        local var="${1%%=*}"
+        local val="${1#*=}"
         content="${content//\$\{$var\}/$val}"
         shift
     done
-    echo "$content"
+
+    printf '%s' "$content"
 }
 
 _attach() {
-    [[ ! -d .git ]] && git init -q
+    [[ -d .git ]] || git init -q
 
-    # Check if agent exists and is broken (gitlink pointing to missing gitdir)
     local needs_reset=0
-    if [[ -d "agent" ]]; then
+
+    if [[ -e "agent" ]]; then
         if [[ -f "agent/.git" ]]; then
-            # It's a gitlink, check if target exists
-            local gitdir
-            gitdir=$(cat agent/.git 2>/dev/null | sed 's/gitdir: //' 2>/dev/null || echo "")
-            if [[ -z "$gitdir" ]] || [[ ! -d "$gitdir" ]]; then
+            local gitdir=""
+            gitdir="$(sed -n 's/^gitdir: //p' agent/.git 2>/dev/null || true)"
+            if [[ -z "$gitdir" || ! -d "$gitdir" ]]; then
                 _log "Broken gitlink detected, cleaning..."
                 needs_reset=1
             fi
-        elif [[ ! -e "agent/.git" ]]; then
-            # Directory exists but no .git at all
-            _log "Agent directory missing .git, cleaning..."
+        elif [[ -d "agent" && ! -e "agent/.git" ]]; then
+            _log "Agent directory exists without git metadata, cleaning..."
             needs_reset=1
         fi
 
         if [[ "$needs_reset" -eq 1 ]]; then
             rm -rf agent
-            # Forcefully scrub all submodule registrations
-            git submodule deinit -f agent 2>/dev/null || true
-            git rm --cached agent 2>/dev/null || true
-            rm -rf .git/modules/agent 2>/dev/null || true
-            git config --remove-section submodule.agent 2>/dev/null || true
-            # Also remove from .gitmodules if present
+            git submodule deinit -f -- agent >/dev/null 2>&1 || true
+            git rm -f --cached agent >/dev/null 2>&1 || true
+            rm -rf .git/modules/agent >/dev/null 2>&1 || true
+            git config --remove-section submodule.agent >/dev/null 2>&1 || true
             if [[ -f .gitmodules ]]; then
-                git config --file=.gitmodules --remove-section submodule.agent 2>/dev/null || true
-                git add .gitmodules 2>/dev/null || true
+                git config -f .gitmodules --remove-section submodule.agent >/dev/null 2>&1 || true
             fi
         fi
     fi
 
-    # Check if submodule is registered in index but directory is missing
-    if git ls-files --stage | grep -q "^160000.*agent$" && [[ ! -d "agent/.git" ]]; then
-        _log "Ghost submodule registration detected, scrubbing..."
-        git rm --cached agent 2>/dev/null || true
-        rm -rf .git/modules/agent 2>/dev/null || true
-        git config --remove-section submodule.agent 2>/dev/null || true
+    if git ls-files --stage -- agent 2>/dev/null | awk '$1 == 160000 {found=1} END {exit(found ? 0 : 1)}'; then
+        if [[ ! -d "agent/.git" && ! -f "agent/.git" ]]; then
+            _log "Ghost submodule registration detected, scrubbing..."
+            git rm -f --cached agent >/dev/null 2>&1 || true
+            rm -rf .git/modules/agent >/dev/null 2>&1 || true
+            git config --remove-section submodule.agent >/dev/null 2>&1 || true
+        fi
     fi
 
-    # If agent doesn't exist or was cleaned, add it fresh
     if [[ ! -d "agent" ]]; then
         _log "Attaching agent/ ($REMOTE_BRANCH)..."
-        git submodule add --force -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent 2>&1 || {
-            # If add fails, try manual initialization
-            _log "Submodule add failed, trying manual setup..."
-            rm -rf agent  # Ensure clean state
-            git clone -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent --depth 1 || true
-            git submodule add --force "$REMOTE_REPO" agent 2>/dev/null || true
-        }
+        if ! git submodule add --force -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent; then
+            _log "Submodule add failed, trying manual clone..."
+            rm -rf agent
+            git clone --depth 1 -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent
+        fi
     fi
 
     _log "Syncing agent/ to latest $REMOTE_BRANCH..."
-    git submodule set-branch --branch "$REMOTE_BRANCH" agent 2>/dev/null || true
-    git submodule sync agent 2>/dev/null || true
+    git submodule set-branch --branch "$REMOTE_BRANCH" agent >/dev/null 2>&1 || true
+    git submodule sync -- agent >/dev/null 2>&1 || true
 
-    # Force update the submodule to latest remote commit
-    git submodule update --init --force --remote agent 2>/dev/null || {
-        _log "Standard update failed, trying fallback..."
-        git submodule update --init --force agent 2>/dev/null || true
-    }
+    if ! git submodule update --init --force --remote -- agent; then
+        _log "Standard submodule update failed, trying fallback..."
+        git submodule update --init --force -- agent >/dev/null 2>&1 || true
+    fi
 
-    # Enter agent and ensure correct branch/state
-    if [[ -d "agent/.git" ]] || [[ -f "agent/.git" ]]; then
+    if [[ -d "agent" || -f "agent/.git" ]]; then
         (
             cd agent || exit 1
 
-            # Ensure we have the full git history for the branch
-            if [[ -f .git ]]; then
-                # It's a gitlink, the real repo is elsewhere
-                cd "$(git rev-parse --show-toplevel)" || exit 1
-            fi
+            git fetch origin "$REMOTE_BRANCH" -q 2>/dev/null || git fetch origin -q 2>/dev/null || true
 
-            # Fetch the specific branch explicitly
-            git fetch origin "$REMOTE_BRANCH" -q 2>/dev/null || git fetch origin -q || true
-
-            # Check if remote branch exists
             if git show-ref --verify --quiet "refs/remotes/origin/$REMOTE_BRANCH" 2>/dev/null; then
-                # Try to checkout existing branch or create tracking branch
-                if ! git checkout -q "$REMOTE_BRANCH" 2>/dev/null; then
-                    git checkout -q -b "$REMOTE_BRANCH" --track "origin/$REMOTE_BRANCH" 2>/dev/null || \
+                git checkout -q "$REMOTE_BRANCH" 2>/dev/null || \
                     git checkout -q -B "$REMOTE_BRANCH" "origin/$REMOTE_BRANCH" 2>/dev/null || true
-                fi
-                # Reset to ensure we're at the tip
                 git reset --hard "origin/$REMOTE_BRANCH" -q 2>/dev/null || true
             else
-                _log "${C_YELLOW}Warning: Remote branch $REMOTE_BRANCH not found, using current state${C_RESET}"
+                _warn "Remote branch $REMOTE_BRANCH not found, keeping current state."
             fi
-        ) || _log "${C_YELLOW}Sync warning: Could not sync agent branch.${C_RESET}"
+        ) || _warn "Could not sync agent branch."
     fi
-
-    # CRITICAL: Always return success so set -e doesn't kill the script
-    return 0
 }
 
 _scaffold() {
@@ -147,23 +135,32 @@ _scaffold() {
     if [[ -d "agent/defaults/skills" ]]; then
         for f in agent/defaults/skills/*/SKILL.md; do
             [[ -f "$f" ]] || continue
-            local name="$(basename "$(dirname "$f")")"
+            local name
+            name="$(basename "$(dirname "$f")")"
             mkdir -p ".opencode/skills/$name"
-            [[ ! -f ".opencode/skills/$name/SKILL.md" ]] && cp "$f" ".opencode/skills/$name/SKILL.md"
+            if [[ ! -f ".opencode/skills/$name/SKILL.md" ]]; then
+                cp "$f" ".opencode/skills/$name/SKILL.md"
+            fi
         done
     fi
 
     if [[ -d "agent/defaults/commands" ]]; then
         for f in agent/defaults/commands/*.md; do
             [[ -f "$f" ]] || continue
-            local name="$(basename "$f" .md)"
-            [[ ! -f ".opencode/commands/$name.md" ]] && cp "$f" ".opencode/commands/$name.md"
+            local name
+            name="$(basename "$f" .md)"
+            if [[ ! -f ".opencode/commands/$name.md" ]]; then
+                cp "$f" ".opencode/commands/$name.md"
+            fi
         done
     fi
 }
 
 _run_opencode() {
-    local prompt="$1" prompt_file="$(mktemp)"
+    local prompt="$1"
+    local prompt_file
+    prompt_file="$(mktemp)"
+
     printf '%s' "$prompt" > "$prompt_file"
 
     _log "Waking up AI to analyze..."
@@ -173,9 +170,12 @@ _run_opencode() {
         -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro \
         --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)" \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        -e OPENROUTER_API_KEY -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL" \
-        -e GITHUB_TOKEN -e EXA_API_KEY -e PROJECT_ROOT="$PWD" \
-        multitui bash -c 'opencode --model "$OPENCODE_DEFAULT_MODEL" run "$(cat /tmp/prompt.txt)"'
+        -e OPENROUTER_API_KEY \
+        -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL" \
+        -e GITHUB_TOKEN \
+        -e EXA_API_KEY \
+        -e PROJECT_ROOT="$PWD" \
+        multitui bash -lc 'opencode --model "$OPENCODE_DEFAULT_MODEL" run "$(cat /tmp/prompt.txt)"'
 
     rm -f "$prompt_file"
 }
@@ -208,7 +208,9 @@ cmd_setup() {
 cmd_build() {
     local no_cache=""
     while [[ $# -gt 0 ]]; do
-        case "$1" in --no-cache) no_cache="--no-cache" ;; esac
+        case "$1" in
+            --no-cache) no_cache="--no-cache" ;;
+        esac
         shift
     done
 
@@ -218,14 +220,13 @@ cmd_build() {
     )
 
     if docker images -q multitui | grep -q .; then
-        if [[ "$no_cache" == "" ]]; then
+        if [[ -z "$no_cache" ]]; then
             _log "Checking for OpenCode updates..."
-            local current_version
-            current_version=$(docker run --rm multitui opencode --version 2>/dev/null | tr -d '[:space:]' | sed 's/^v//')
-            local latest_version
-            latest_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+            local current_version latest_version
+            current_version="$(docker run --rm multitui opencode --version 2>/dev/null | tr -d '[:space:]' | sed 's/^v//')"
+            latest_version="$(curl -fsSL https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name' | sed 's/^v//')"
 
-            if [[ -n "$latest_version" ]] && [[ "$current_version" != "$latest_version" ]]; then
+            if [[ -n "$latest_version" && "$current_version" != "$latest_version" ]]; then
                 _log "OpenCode v$current_version → v$latest_version (update available)"
                 build_args+=(--build-arg "OPENCODE_VERSION=v$latest_version")
                 no_cache="--no-cache"
@@ -243,34 +244,46 @@ cmd_build() {
         "${build_args[@]}" \
         -f "$MTUI_HOME/docker/Dockerfile" \
         -t multitui "$MTUI_HOME/docker"
+
     echo -e "${C_GREEN}[✔] Build complete.${C_RESET}"
 }
 
 cmd_init() {
-    local instr="${1:-}" name="$(basename "$PWD")"
+    local instr="${1:-}"
+    local name
+    name="$(basename "$PWD")"
 
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
-    _attach || _log "Attach completed with warnings"
+    _attach
     _scaffold
-    _run_opencode "$(_render_template "agent/defaults/templates/init.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
+
+    local template_file="agent/defaults/templates/init.md"
+    [[ -r "$template_file" ]] || _err "Missing template: $template_file"
+
+    _run_opencode "$(_render_template "$template_file" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
 }
 
 cmd_bootstrap() {
-    local instr="${1:-}" name="$(basename "$PWD")"
+    local instr="${1:-}"
+    local name
+    name="$(basename "$PWD")"
 
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
     _log "Step 1/4: Attaching agent..."
-    _attach || _log "Attach completed with warnings"
+    _attach
 
     _log "Step 2/4: Scaffolding..."
     _scaffold
 
     _log "Step 3/4: Rendering template..."
+    local template_file="agent/defaults/templates/bootstrap.md"
+    [[ -r "$template_file" ]] || _err "Missing template: $template_file"
+
     local template_content
-    template_content="$(_render_template "agent/defaults/templates/bootstrap.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
+    template_content="$(_render_template "$template_file" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
 
     _log "Step 4/4: Running OpenCode analysis..."
     _run_opencode "$template_content"
@@ -279,27 +292,41 @@ cmd_bootstrap() {
 }
 
 cmd_start() {
-    [[ -z "$OPENROUTER_API_KEY" ]] && _err "OPENROUTER_API_KEY not set."
+    [[ -n "${OPENROUTER_API_KEY:-}" ]] || _err "OPENROUTER_API_KEY not set."
 
-    # Auto-attach if missing (for resuming projects)
-    [[ ! -d "agent" ]] && { _log "Agent missing, attaching..."; _attach || true; _scaffold || true; }
+    if [[ ! -d "agent" ]]; then
+        _log "Agent missing, attaching..."
+        _attach
+        _scaffold
+    fi
 
-    local cn="$(_container_name)"
-    local mode="auto"
+    local cn mode
+    cn="$(_container_name)"
+    mode="auto"
     local flags=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --tty) mode="tty"; shift ;;
-            -p|--port) flags+=("-p" "$2"); shift 2 ;;
-            *) shift ;;
+            --tty)
+                mode="tty"
+                shift
+                ;;
+            -p|--port)
+                flags+=("-p" "$2")
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
         esac
     done
 
     if docker ps -aq -f name="^/${cn}$" | grep -q .; then
-        local mounted="$(docker inspect "$cn" --format '{{.Config.WorkingDir}}' 2>/dev/null)"
+        local mounted
+        mounted="$(docker inspect "$cn" --format '{{.Config.WorkingDir}}' 2>/dev/null || true)"
         if [[ "$mounted" != "$PWD" ]]; then
-            _err "Container $cn exists but belongs to a different path: $mounted\nRun 'mtui clean' first to remove it."
+            _err "Container $cn exists but belongs to a different path: $mounted
+Run 'mtui clean' first to remove it."
         fi
         _log "Resuming $cn..."
         exec docker start -ai "$cn"
@@ -309,26 +336,33 @@ cmd_start() {
     _log "Starting OpenCode..."
 
     flags+=(
-        -it --name "$cn" --detach-keys="ctrl-z"
-        -v "$PWD":"$PWD" -w "$PWD"
+        -it
+        --name "$cn"
+        --detach-keys="ctrl-z"
+        -v "$PWD":"$PWD"
+        -w "$PWD"
         -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro
         --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
         -v /var/run/docker.sock:/var/run/docker.sock
         -v "$HOME/.ssh":/home/dev/.ssh:ro
-        -e OPENROUTER_API_KEY -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e GITHUB_TOKEN -e EXA_API_KEY -e PROJECT_ROOT="$PWD"
+        -e OPENROUTER_API_KEY
+        -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
+        -e GITHUB_TOKEN
+        -e EXA_API_KEY
+        -e PROJECT_ROOT="$PWD"
     )
 
-    if [ "$mode" = "tty" ]; then
+    if [[ "$mode" == "tty" ]]; then
         exec docker run "${flags[@]}" multitui bash
     else
-        exec docker run "${flags[@]}" multitui bash -c "cd '$PWD' && opencode --model \"$OPENCODE_DEFAULT_MODEL\""
+        exec docker run "${flags[@]}" multitui bash -lc 'opencode --model "$OPENCODE_DEFAULT_MODEL"'
     fi
 }
 
 cmd_clean() {
-    local cn="$(_container_name)"
-    if docker rm -f "$cn" 2>/dev/null >/dev/null; then
+    local cn
+    cn="$(_container_name)"
+    if docker rm -f "$cn" >/dev/null 2>&1; then
         echo -e "${C_GREEN}[✔] Removed container: $cn${C_RESET}"
     else
         _log "No container found for this project ($cn)."
@@ -337,8 +371,7 @@ cmd_clean() {
 
 cmd_list() {
     echo -e "${C_BOLD}MultiTUI Active Projects:${C_RESET}\n"
-    docker ps -a --filter "name=^mtui-" --format "table {{.Names}}\t{{.State}}\t{{.Status}}" | sed 's/mtui-//' | \
-    awk 'NR==1 {print "\033[1m" $0 "\033[0m"}; NR>1 {print $0}'
+    docker ps -a --filter "name=^mtui-" --format "table {{.Names}}\t{{.State}}\t{{.Status}}" | sed 's/^mtui-//'
     echo ""
 }
 
@@ -346,15 +379,19 @@ cmd_status() {
     echo -e "${C_BOLD}Project Directory:${C_RESET}  $PWD"
 
     if [[ -d "agent" ]]; then
-        local sub_stat="$(git submodule status agent 2>/dev/null || echo 'Unknown')"
+        local sub_stat
+        sub_stat="$(git submodule status agent 2>/dev/null || echo 'Unknown')"
         echo -e "${C_BOLD}Agent Submodule:${C_RESET}    ${C_GREEN}Attached${C_RESET} ($sub_stat)"
     else
         echo -e "${C_BOLD}Agent Submodule:${C_RESET}    ${C_RED}Missing${C_RESET} (Run mtui init)"
     fi
 
-    [[ -f "AGENTS.md" ]] && echo -e "${C_BOLD}AGENTS.md:${C_RESET}          ${C_GREEN}Found${C_RESET}" || echo -e "${C_BOLD}AGENTS.md:${C_RESET}          ${C_YELLOW}Missing${C_RESET}"
+    [[ -f "AGENTS.md" ]] && \
+        echo -e "${C_BOLD}AGENTS.md:${C_RESET}          ${C_GREEN}Found${C_RESET}" || \
+        echo -e "${C_BOLD}AGENTS.md:${C_RESET}          ${C_YELLOW}Missing${C_RESET}"
 
-    local c_state="$(docker inspect -f '{{.State.Status}}' "$(_container_name)" 2>/dev/null || echo 'Not Created')"
+    local c_state
+    c_state="$(docker inspect -f '{{.State.Status}}' "$(_container_name)" 2>/dev/null || echo 'Not Created')"
 
     if [[ "$c_state" == "running" ]]; then
         echo -e "${C_BOLD}Container Status:${C_RESET}   ${C_GREEN}Running${C_RESET} ($(_container_name))"
@@ -394,21 +431,34 @@ COMMAND="$1"
 shift
 
 case "$COMMAND" in
-    setup)       cmd_setup "$@" ;;
-    build)       cmd_build "$@" ;;
+    setup)
+        cmd_setup "$@"
+        ;;
+    build)
+        cmd_build "$@"
+        ;;
     init|bootstrap|start)
-                _warn_no_agent
-                case "$COMMAND" in
-                    init)        cmd_init "$@" ;;
-                    bootstrap)   cmd_bootstrap "$@" ;;
-                    start)       cmd_start "$@" ;;
-                esac
-                ;;
-    clean|stop)  cmd_clean ;;
-    list|ls)     cmd_list ;;
-    status)      cmd_status ;;
-    -h|--help)   show_help ;;
+        _warn_no_agent
+        case "$COMMAND" in
+            init)      cmd_init "$@" ;;
+            bootstrap) cmd_bootstrap "$@" ;;
+            start)     cmd_start "$@" ;;
+        esac
+        ;;
+    clean|stop)
+        cmd_clean
+        ;;
+    list|ls)
+        cmd_list
+        ;;
+    status)
+        cmd_status
+        ;;
+    -h|--help)
+        show_help
+        ;;
     *)
-        _err "Unknown command: $COMMAND\nRun 'mtui --help' for usage."
+        _err "Unknown command: $COMMAND
+Run 'mtui --help' for usage."
         ;;
 esac
