@@ -111,15 +111,39 @@ cmd_setup() {
 cmd_build() {
     local no_cache=""
     while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --no-cache) no_cache="--no-cache" ;;
-            *) ;;
-        esac
+        case "$1" in --no-cache) no_cache="--no-cache" ;; esac
         shift
     done
+
+    local build_args=(
+        --build-arg HOST_UID="$(id -u)"
+        --build-arg HOST_GID="$(id -g)"
+    )
+
+    if docker images -q multitui | grep -q .; then
+        if [[ "$no_cache" == "" ]]; then
+            _log "Checking for OpenCode updates..."
+            local current_version
+            current_version=$(docker run --rm multitui opencode --version 2>/dev/null | tr -d '[:space:]' | sed 's/^v//')
+            local latest_version
+            latest_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+
+            if [[ -n "$latest_version" ]] && [[ "$current_version" != "$latest_version" ]]; then
+                _log "OpenCode v$current_version → v$latest_version (update available)"
+                build_args+=(--build-arg "OPENCODE_VERSION=v$latest_version")
+                no_cache="--no-cache"
+            else
+                _log "OpenCode v$current_version is up-to-date. skipping build."
+                return 0
+            fi
+        fi
+    else
+        _log "No multitui image found, building fresh..."
+    fi
+
+    _log "Building multitui image..."
     docker build $no_cache \
-        --build-arg HOST_UID="$(id -u)" \
-        --build-arg HOST_GID="$(id -g)" \
+        "${build_args[@]}" \
         -f "$MTUI_HOME/docker/Dockerfile" \
         -t multitui "$MTUI_HOME/docker"
     echo -e "${C_GREEN}[✔] Build complete.${C_RESET}"
