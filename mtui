@@ -126,12 +126,12 @@ cmd_build() {
 }
 
 cmd_init() {
-    local name="$(basename "$PWD")"
+    local instr="${1:-}" name="$(basename "$PWD")"
 
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
     _attach; _scaffold
-    _run_opencode "$(cat "agent/defaults/templates/init.md")"
+    _run_opencode "$(_render_template "agent/defaults/templates/init.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
 }
 
