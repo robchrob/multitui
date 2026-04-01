@@ -1,3 +1,5 @@
+${USER_INSTRUCTION:+USER INSTRUCTION: ${USER_INSTRUCTION}
+}
 You are setting up a NEW EMPTY project.
 Project name: "${PROJECT_NAME}"
 
