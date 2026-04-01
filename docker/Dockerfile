@@ -43,7 +43,13 @@ RUN npm config set prefix /home/dev/.npm-global
 ENV PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
 RUN echo 'export PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
 
-RUN curl -fsSL https://opencode.ai/install | bash && \
+ARG OPENCODE_VERSION
+
+RUN if [ -n "$OPENCODE_VERSION" ]; then \
+      curl -fsSL https://opencode.ai/install | bash -s -- --version "${OPENCODE_VERSION#v}"; \
+    else \
+      curl -fsSL https://opencode.ai/install | bash; \
+    fi && \
     npm install -g \
       @modelcontextprotocol/server-memory \
       @modelcontextprotocol/server-sequential-thinking
