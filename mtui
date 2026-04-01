@@ -4,7 +4,8 @@
 set -e
 
 MTUI_HOME="$HOME/.multitui"
-REMOTE_REPO="https://github.com/anomalyco/multitui.git"
+REMOTE_REPO="git@github.com:robchrob/multitui.git"
+REMOTE_BRANCH="develop-broken"
 OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
 
 # --- Colors & Helpers ---
@@ -42,29 +43,123 @@ _render_template() {
 }
 
 _attach() {
-    if [[ ! -d "agent" ]]; then
-        _log "Adding agent/ submodule..."
-        [[ ! -d .git ]] && git init -q
-        git submodule add -q "$REMOTE_REPO" agent || true
-        git submodule update --init --recursive -q
+    [[ ! -d .git ]] && git init -q
+
+    # Check if agent exists and is broken (gitlink pointing to missing gitdir)
+    local needs_reset=0
+    if [[ -d "agent" ]]; then
+        if [[ -f "agent/.git" ]]; then
+            # It's a gitlink, check if target exists
+            local gitdir
+            gitdir=$(cat agent/.git 2>/dev/null | sed 's/gitdir: //' 2>/dev/null || echo "")
+            if [[ -z "$gitdir" ]] || [[ ! -d "$gitdir" ]]; then
+                _log "Broken gitlink detected, cleaning..."
+                needs_reset=1
+            fi
+        elif [[ ! -e "agent/.git" ]]; then
+            # Directory exists but no .git at all
+            _log "Agent directory missing .git, cleaning..."
+            needs_reset=1
+        fi
+
+        if [[ "$needs_reset" -eq 1 ]]; then
+            rm -rf agent
+            # Forcefully scrub all submodule registrations
+            git submodule deinit -f agent 2>/dev/null || true
+            git rm --cached agent 2>/dev/null || true
+            rm -rf .git/modules/agent 2>/dev/null || true
+            git config --remove-section submodule.agent 2>/dev/null || true
+            # Also remove from .gitmodules if present
+            if [[ -f .gitmodules ]]; then
+                git config --file=.gitmodules --remove-section submodule.agent 2>/dev/null || true
+                git add .gitmodules 2>/dev/null || true
+            fi
+        fi
     fi
+
+    # Check if submodule is registered in index but directory is missing
+    if git ls-files --stage | grep -q "^160000.*agent$" && [[ ! -d "agent/.git" ]]; then
+        _log "Ghost submodule registration detected, scrubbing..."
+        git rm --cached agent 2>/dev/null || true
+        rm -rf .git/modules/agent 2>/dev/null || true
+        git config --remove-section submodule.agent 2>/dev/null || true
+    fi
+
+    # If agent doesn't exist or was cleaned, add it fresh
+    if [[ ! -d "agent" ]]; then
+        _log "Attaching agent/ ($REMOTE_BRANCH)..."
+        git submodule add --force -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent 2>&1 || {
+            # If add fails, try manual initialization
+            _log "Submodule add failed, trying manual setup..."
+            rm -rf agent  # Ensure clean state
+            git clone -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent --depth 1 || true
+            git submodule add --force "$REMOTE_REPO" agent 2>/dev/null || true
+        }
+    fi
+
+    _log "Syncing agent/ to latest $REMOTE_BRANCH..."
+    git submodule set-branch --branch "$REMOTE_BRANCH" agent 2>/dev/null || true
+    git submodule sync agent 2>/dev/null || true
+
+    # Force update the submodule to latest remote commit
+    git submodule update --init --force --remote agent 2>/dev/null || {
+        _log "Standard update failed, trying fallback..."
+        git submodule update --init --force agent 2>/dev/null || true
+    }
+
+    # Enter agent and ensure correct branch/state
+    if [[ -d "agent/.git" ]] || [[ -f "agent/.git" ]]; then
+        (
+            cd agent || exit 1
+
+            # Ensure we have the full git history for the branch
+            if [[ -f .git ]]; then
+                # It's a gitlink, the real repo is elsewhere
+                cd "$(git rev-parse --show-toplevel)" || exit 1
+            fi
+
+            # Fetch the specific branch explicitly
+            git fetch origin "$REMOTE_BRANCH" -q 2>/dev/null || git fetch origin -q || true
+
+            # Check if remote branch exists
+            if git show-ref --verify --quiet "refs/remotes/origin/$REMOTE_BRANCH" 2>/dev/null; then
+                # Try to checkout existing branch or create tracking branch
+                if ! git checkout -q "$REMOTE_BRANCH" 2>/dev/null; then
+                    git checkout -q -b "$REMOTE_BRANCH" --track "origin/$REMOTE_BRANCH" 2>/dev/null || \
+                    git checkout -q -B "$REMOTE_BRANCH" "origin/$REMOTE_BRANCH" 2>/dev/null || true
+                fi
+                # Reset to ensure we're at the tip
+                git reset --hard "origin/$REMOTE_BRANCH" -q 2>/dev/null || true
+            else
+                _log "${C_YELLOW}Warning: Remote branch $REMOTE_BRANCH not found, using current state${C_RESET}"
+            fi
+        ) || _log "${C_YELLOW}Sync warning: Could not sync agent branch.${C_RESET}"
+    fi
+
+    # CRITICAL: Always return success so set -e doesn't kill the script
+    return 0
 }
 
 _scaffold() {
+    _log "Scaffolding .opencode structure..."
     mkdir -p .opencode/{agents,commands,skills}
 
-    for f in agent/defaults/skills/*/SKILL.md; do
-        [[ -f "$f" ]] || continue
-        local name="$(basename "$(dirname "$f")")"
-        mkdir -p ".opencode/skills/$name"
-        [[ ! -f ".opencode/skills/$name/SKILL.md" ]] && cp "$f" ".opencode/skills/$name/SKILL.md"
-    done
+    if [[ -d "agent/defaults/skills" ]]; then
+        for f in agent/defaults/skills/*/SKILL.md; do
+            [[ -f "$f" ]] || continue
+            local name="$(basename "$(dirname "$f")")"
+            mkdir -p ".opencode/skills/$name"
+            [[ ! -f ".opencode/skills/$name/SKILL.md" ]] && cp "$f" ".opencode/skills/$name/SKILL.md"
+        done
+    fi
 
-    for f in agent/defaults/commands/*.md; do
-        [[ -f "$f" ]] || continue
-        local name="$(basename "$f" .md)"
-        [[ ! -f ".opencode/commands/$name.md" ]] && cp "$f" ".opencode/commands/$name.md"
-    done
+    if [[ -d "agent/defaults/commands" ]]; then
+        for f in agent/defaults/commands/*.md; do
+            [[ -f "$f" ]] || continue
+            local name="$(basename "$f" .md)"
+            [[ ! -f ".opencode/commands/$name.md" ]] && cp "$f" ".opencode/commands/$name.md"
+        done
+    fi
 }
 
 _run_opencode() {
@@ -91,11 +186,13 @@ cmd_setup() {
     _log "Setting up MultiTUI globally in $MTUI_HOME..."
 
     if [[ ! -d "$MTUI_HOME" ]]; then
-        _log "Cloning framework..."
-        git clone "$REMOTE_REPO" "$MTUI_HOME"
+        _log "Cloning framework ($REMOTE_BRANCH)..."
+        git clone "$REMOTE_REPO" -b "$REMOTE_BRANCH" "$MTUI_HOME"
     else
-        _log "Updating framework..."
-        git -C "$MTUI_HOME" pull
+        _log "Updating framework ($REMOTE_BRANCH)..."
+        git -C "$MTUI_HOME" checkout "$REMOTE_BRANCH" -q 2>/dev/null || \
+            git -C "$MTUI_HOME" checkout -B "$REMOTE_BRANCH" "origin/$REMOTE_BRANCH" -q 2>/dev/null || true
+        git -C "$MTUI_HOME" pull origin "$REMOTE_BRANCH" -q 2>/dev/null || true
     fi
 
     _log "Linking mtui to ~/.local/bin/mtui..."
@@ -154,24 +251,38 @@ cmd_init() {
 
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
-    _attach; _scaffold
+    _attach || _log "Attach completed with warnings"
+    _scaffold
     _run_opencode "$(_render_template "agent/defaults/templates/init.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
 }
 
 cmd_bootstrap() {
     local instr="${1:-}" name="$(basename "$PWD")"
-    
+
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
-    _attach; _scaffold
-    _run_opencode "$(_render_template "agent/defaults/templates/bootstrap.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
+    _log "Step 1/4: Attaching agent..."
+    _attach || _log "Attach completed with warnings"
+
+    _log "Step 2/4: Scaffolding..."
+    _scaffold
+
+    _log "Step 3/4: Rendering template..."
+    local template_content
+    template_content="$(_render_template "agent/defaults/templates/bootstrap.md" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
+
+    _log "Step 4/4: Running OpenCode analysis..."
+    _run_opencode "$template_content"
+
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
 }
 
 cmd_start() {
     [[ -z "$OPENROUTER_API_KEY" ]] && _err "OPENROUTER_API_KEY not set."
-    [[ ! -d "agent" ]] && _err "No agent/ submodule found. Run 'mtui init' first."
+
+    # Auto-attach if missing (for resuming projects)
+    [[ ! -d "agent" ]] && { _log "Agent missing, attaching..."; _attach || true; _scaffold || true; }
 
     local cn="$(_container_name)"
     local mode="auto"
@@ -205,8 +316,7 @@ cmd_start() {
         -v /var/run/docker.sock:/var/run/docker.sock
         -v "$HOME/.ssh":/home/dev/.ssh:ro
         -e OPENROUTER_API_KEY -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e GITHUB_TOKEN -e GITHUB_KEY -e GITHUB_USER -e EXA_API_KEY
-        -e PROJECT_ROOT="$PWD"
+        -e GITHUB_TOKEN -e EXA_API_KEY -e PROJECT_ROOT="$PWD"
     )
 
     if [ "$mode" = "tty" ]; then
