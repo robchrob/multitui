@@ -98,7 +98,7 @@ my-project/
 ├── .opencode/
 │   ├── skills/            # Scaffolded from agent/
 │   └── commands/          # Scaffolded from agent/
-├── agent/                 # MultiTUI submodule (READ-ONLY)
+├── agent/                 # MultiTUI agent (cloned, READ-ONLY)
 │   ├── mtui               # CLI binary
 │   ├── docker/Dockerfile
 │   ├── defaults/

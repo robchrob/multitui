@@ -54,7 +54,7 @@ Turn any public GitHub repo into a searchable wiki. Search by description
 instead of file names. Useful for onboarding to large OSS codebases.
 
 ## Rules
-- `agent/` is READ-ONLY submodule
+- `agent/` is READ-ONLY (cloned, not a submodule)
 - Dockerfiles, compose files → project root
 - Spawned container ports bind to HOST
 - Container state outside `$PROJECT_ROOT` is ephemeral
