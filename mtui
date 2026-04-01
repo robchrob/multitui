@@ -6,7 +6,7 @@ shopt -s nullglob
 
 MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="git@github.com:robchrob/multitui.git"
-REMOTE_BRANCH="develop-broken"
+REMOTE_BRANCH="develop"
 OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
 
 # --- Colors & Helpers ---
