@@ -55,77 +55,25 @@ _render_template() {
 }
 
 _attach() {
-    [[ -d .git ]] || git init -q
+    local agent_ok=0
 
-    local needs_reset=0
-
-    if [[ -e "agent" ]]; then
-        if [[ -f "agent/.git" ]]; then
-            local gitdir=""
-            gitdir="$(sed -n 's/^gitdir: //p' agent/.git 2>/dev/null || true)"
-            if [[ -z "$gitdir" || ! -d "$gitdir" ]]; then
-                _log "Broken gitlink detected, cleaning..."
-                needs_reset=1
-            fi
-        elif [[ -d "agent" && ! -e "agent/.git" ]]; then
-            _log "Agent directory exists without git metadata, cleaning..."
-            needs_reset=1
-        fi
-
-        if [[ "$needs_reset" -eq 1 ]]; then
-            rm -rf agent
-            git submodule deinit -f -- agent >/dev/null 2>&1 || true
-            git rm -f --cached agent >/dev/null 2>&1 || true
-            rm -rf .git/modules/agent >/dev/null 2>&1 || true
-            git config --remove-section submodule.agent >/dev/null 2>&1 || true
-            if [[ -f .gitmodules ]]; then
-                git config -f .gitmodules --remove-section submodule.agent >/dev/null 2>&1 || true
-            fi
+    if [[ -d "agent/.git" ]]; then
+        if git -C agent rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            agent_ok=1
         fi
     fi
 
-    if git ls-files --stage -- agent 2>/dev/null | awk '$1 == 160000 {found=1} END {exit(found ? 0 : 1)}'; then
-        if [[ ! -d "agent/.git" && ! -f "agent/.git" ]]; then
-            _log "Ghost submodule registration detected, scrubbing..."
-            git rm -f --cached agent >/dev/null 2>&1 || true
-            rm -rf .git/modules/agent >/dev/null 2>&1 || true
-            git config --remove-section submodule.agent >/dev/null 2>&1 || true
-        fi
+    if [[ "$agent_ok" -ne 1 ]]; then
+        _log "Agent missing or broken, re-cloning..."
+        rm -rf agent .git/modules/agent
+        git config --remove-section submodule.agent >/dev/null 2>&1 || true
+        git clone --depth 1 -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent
     fi
 
-    if [[ ! -d "agent" ]]; then
-        _log "Attaching agent/ ($REMOTE_BRANCH)..."
-        if ! git submodule add --force -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent; then
-            _log "Submodule add failed, trying manual clone..."
-            rm -rf agent
-            git clone --depth 1 -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent
-        fi
-    fi
-
-    _log "Syncing agent/ to latest $REMOTE_BRANCH..."
-    git submodule set-branch --branch "$REMOTE_BRANCH" agent >/dev/null 2>&1 || true
-    git submodule sync -- agent >/dev/null 2>&1 || true
-
-    if ! git submodule update --init --force --remote -- agent; then
-        _log "Standard submodule update failed, trying fallback..."
-        git submodule update --init --force -- agent >/dev/null 2>&1 || true
-    fi
-
-    if [[ -d "agent" || -f "agent/.git" ]]; then
-        (
-            cd agent || exit 1
-
-            git fetch origin "$REMOTE_BRANCH" -q 2>/dev/null || git fetch origin -q 2>/dev/null || true
-
-            if git show-ref --verify --quiet "refs/remotes/origin/$REMOTE_BRANCH" 2>/dev/null; then
-                git checkout -q "$REMOTE_BRANCH" 2>/dev/null || \
-                    git checkout -q -B "$REMOTE_BRANCH" "origin/$REMOTE_BRANCH" 2>/dev/null || true
-                git reset --hard "origin/$REMOTE_BRANCH" -q 2>/dev/null || true
-            else
-                _warn "Remote branch $REMOTE_BRANCH not found, keeping current state."
-            fi
-        ) || _warn "Could not sync agent branch."
-    fi
+    _log "Updating agent to latest $REMOTE_BRANCH..."
+    git -C agent fetch origin "$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
+    git -C agent checkout -q "$REMOTE_BRANCH" >/dev/null 2>&1 || true
+    git -C agent reset --hard "origin/$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
 }
 
 _scaffold() {
