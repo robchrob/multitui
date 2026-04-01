@@ -26,7 +26,7 @@ _err() { echo -e "${C_RED}[✘] $1${C_RESET}" >&2; exit 1; }
 
 _warn_no_agent() {
     if [[ ! -d "agent" ]]; then
-        _warn "No agent/ submodule found in this directory."
+        _warn "No agent/ directory found in this project."
         _warn "Run 'mtui init' or 'mtui bootstrap' to attach the agent first."
         sleep 1
     fi
@@ -54,6 +54,18 @@ _render_template() {
     printf '%s' "$content"
 }
 
+_ensure_gitignore_entry() {
+    local entry="agent/"
+    local file=".gitignore"
+
+    touch "$file"
+
+    if ! grep -qxF "$entry" "$file"; then
+        printf '\n%s\n' "$entry" >> "$file"
+        _log "Added $entry to .gitignore"
+    fi
+}
+
 _attach() {
     local agent_ok=0
 
@@ -69,6 +81,8 @@ _attach() {
         git config --remove-section submodule.agent >/dev/null 2>&1 || true
         git clone --depth 1 -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent
     fi
+
+    _ensure_gitignore_entry
 
     _log "Updating agent to latest $REMOTE_BRANCH..."
     git -C agent fetch origin "$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
@@ -322,11 +336,11 @@ cmd_status() {
     echo -e "${C_BOLD}Project Directory:${C_RESET}  $PWD"
 
     if [[ -d "agent" ]]; then
-        local sub_stat
-        sub_stat="$(git submodule status agent 2>/dev/null || echo 'Unknown')"
-        echo -e "${C_BOLD}Agent Submodule:${C_RESET}    ${C_GREEN}Attached${C_RESET} ($sub_stat)"
+        local agent_branch
+        agent_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
+        echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch)"
     else
-        echo -e "${C_BOLD}Agent Submodule:${C_RESET}    ${C_RED}Missing${C_RESET} (Run mtui init)"
+        echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_RED}Missing${C_RESET} (Run mtui init)"
     fi
 
     [[ -f "AGENTS.md" ]] && \
