@@ -63,15 +63,16 @@ _render_template() {
 }
 
 _ensure_gitignore_entry() {
-    local entry="agent/"
     local file=".gitignore"
 
     touch "$file"
 
-    if ! grep -qxF "$entry" "$file"; then
-        printf '\n%s\n' "$entry" >> "$file"
-        _log "Added $entry to .gitignore"
-    fi
+    for entry in "agent/" ".opencode/"; do
+        if ! grep -qxF "$entry" "$file"; then
+            printf '\n%s\n' "$entry" >> "$file"
+            _log "Added $entry to .gitignore"
+        fi
+    done
 }
 
 _attach() {
@@ -109,7 +110,7 @@ _scaffold() {
             name="$(basename "$(dirname "$f")")"
             mkdir -p ".opencode/skills/$name"
             if [[ ! -f ".opencode/skills/$name/SKILL.md" ]]; then
-                cp "$f" ".opencode/skills/$name/SKILL.md"
+                ln -sf "$f" ".opencode/skills/$name/SKILL.md"
             fi
         done
     fi
@@ -120,7 +121,7 @@ _scaffold() {
             local name
             name="$(basename "$f" .md)"
             if [[ ! -f ".opencode/commands/$name.md" ]]; then
-                cp "$f" ".opencode/commands/$name.md"
+                ln -sf "$f" ".opencode/commands/$name.md"
             fi
         done
     fi
