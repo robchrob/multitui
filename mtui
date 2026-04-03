@@ -118,21 +118,45 @@ _scaffold() {
     fi
 }
 
+# Build the common docker flags array used by both _run_opencode and cmd_start.
+# Appends into the named array variable passed as $1.
+# Usage: _build_docker_flags my_array [-p HOST:CONTAINER ...]
+_build_docker_flags() {
+    local -n _flags_ref="$1"
+    shift
+
+    local extra_ports=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p|--port) extra_ports+=("-p" "$2"); shift 2 ;;
+            *) shift ;;
+        esac
+    done
+
+    _flags_ref+=(
+        -v "$PWD":"$PWD"
+        -w "$PWD"
+        -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro
+        --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
+        -v /var/run/docker.sock:/var/run/docker.sock
+        -e OPENROUTER_API_KEY
+        -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
+        -e GITHUB_TOKEN
+        -e EXA_API_KEY
+        -e PROJECT_ROOT="$PWD"
+    )
+
+    [[ ${#extra_ports[@]} -gt 0 ]] && _flags_ref+=("${extra_ports[@]}")
+}
+
 _run_opencode() {
     local prompt="$1"
+    shift
+    local flags=()
+    _build_docker_flags flags "$@"
 
     _log "Waking up AI to analyze..."
-    docker run --rm \
-        -v "$PWD":"$PWD" -w "$PWD" \
-        -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro \
-        --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)" \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        -e OPENROUTER_API_KEY \
-        -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL" \
-        -e GITHUB_TOKEN \
-        -e EXA_API_KEY \
-        -e PROJECT_ROOT="$PWD" \
-        multitui \
+    docker run --rm "${flags[@]}" multitui \
         opencode --model "$OPENCODE_DEFAULT_MODEL" run "$prompt"
 }
 
@@ -175,6 +199,17 @@ cmd_build() {
         --build-arg HOST_GID="$(id -g)"
     )
 
+    local dockerfile_dir
+    if [[ -f "agent/docker/Dockerfile" ]]; then
+        dockerfile_dir="$PWD/agent/docker"
+        _log "Using local agent/docker/Dockerfile"
+    elif [[ -f "$MTUI_HOME/docker/Dockerfile" ]]; then
+        dockerfile_dir="$MTUI_HOME/docker"
+        _log "Using global ~/.multitui/docker/Dockerfile"
+    else
+        _err "No Dockerfile found. Run 'mtui setup' first, or attach an agent with 'mtui init'."
+    fi
+
     if docker images -q multitui | grep -q .; then
         if [[ -z "$no_cache" ]]; then
             _log "Checking for OpenCode updates..."
@@ -198,8 +233,8 @@ cmd_build() {
     _log "Building multitui image..."
     docker build $no_cache \
         "${build_args[@]}" \
-        -f "$MTUI_HOME/docker/Dockerfile" \
-        -t multitui "$MTUI_HOME/docker"
+        -f "$dockerfile_dir/Dockerfile" \
+        -t multitui "$dockerfile_dir"
 
     echo -e "${C_GREEN}[✔] Build complete.${C_RESET}"
 }
@@ -258,8 +293,8 @@ cmd_start() {
 
     local cn mode
     cn="$(_container_name)"
-    mode="auto"
-    local flags=()
+    mode="opencode"
+    local port_args=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -268,7 +303,7 @@ cmd_start() {
                 shift
                 ;;
             -p|--port)
-                flags+=("-p" "$2")
+                port_args+=("-p" "$2")
                 shift 2
                 ;;
             *)
@@ -291,22 +326,9 @@ Run 'mtui clean' first to remove it."
     docker images -q multitui | grep -q . || _err "No image. Run 'mtui build' first."
     _log "Starting OpenCode..."
 
-    flags+=(
-        -it
-        --name "$cn"
-        --detach-keys="ctrl-z"
-        -v "$PWD":"$PWD"
-        -w "$PWD"
-        -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro
-        --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
-        -v /var/run/docker.sock:/var/run/docker.sock
-        -v "$HOME/.ssh":/home/dev/.ssh:ro
-        -e OPENROUTER_API_KEY
-        -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e GITHUB_TOKEN
-        -e EXA_API_KEY
-        -e PROJECT_ROOT="$PWD"
-    )
+    local flags=(-it --name "$cn" --detach-keys="ctrl-z")
+    _build_docker_flags flags "${port_args[@]+"${port_args[@]}"}"
+    flags+=(-v "$HOME/.ssh":/home/dev/.ssh:ro)
 
     if [[ "$mode" == "tty" ]]; then
         exec docker run "${flags[@]}" multitui bash
@@ -364,16 +386,24 @@ show_help() {
     echo "Usage: mtui <command> [args]"
     echo ""
     echo -e "${C_BOLD}Global Commands:${C_RESET}"
-    echo "  setup                 Install or update framework globally to ~/.multitui"
-    echo "  build [--no-cache]    Build the 'multitui' base Docker image"
-    echo "  list, ls              List all MultiTUI containers on this machine"
+    echo "  setup                     Install or update framework globally to ~/.multitui"
+    echo "  build [--no-cache]        Build or update the 'multitui' base Docker image"
+    echo "                            Prefers agent/docker/Dockerfile if present locally"
+    echo "  list, ls                  List all MultiTUI containers on this machine"
     echo ""
     echo -e "${C_BOLD}Project Commands:${C_RESET}"
-    echo "  init [stack]          Scaffold a new project, attach agent, AI generates files"
-    echo "  bootstrap [instr]     Analyze existing codebase and configure MultiTUI"
-    echo "  start [--tty] [-p]    Start or resume the OpenCode container for this project"
-    echo "  stop, clean           Stop and remove the container for this project"
-    echo "  status                Show health and status of current directory's MultiTUI setup"
+    echo "  init [instruction]        Scaffold new project, attach agent/, AI generates files"
+    echo "  bootstrap [instruction]   Analyze existing codebase and configure MultiTUI"
+    echo "  start [--tty] [-p H:C]    Start or resume the OpenCode container for this project"
+    echo "                            --tty   Drop into bash shell instead of OpenCode"
+    echo "                            -p H:C  Expose additional port (repeatable)"
+    echo "  stop, clean               Stop and remove the container for this project"
+    echo "  status                    Show health and status of current project's setup"
+    echo ""
+    echo -e "${C_BOLD}Session Tips:${C_RESET}"
+    echo "  Ctrl+Z inside OpenCode → detach (container keeps running)"
+    echo "  mtui start → reattach to existing container"
+    echo "  mtui clean → discard container, start fresh next time"
     echo ""
     echo -e "${C_DIM}Run 'mtui <command> --help' for more info on a command.${C_RESET}"
 }
