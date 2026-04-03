@@ -1,17 +1,19 @@
 # MultiTUI — OpenCode Docker Environment
-One image. Any stack (language/frameworks).
-OpenCode generates your project's Dockerfile and uses DooD for all execution.
+
+One image. Any stack. OpenCode runs inside a container with Docker access...
 
 ## Prerequisites
+
 - Docker running on host
-- `OPENROUTER_API_KEY` set in environment (get one at openrouter.ai)
+- `OPENROUTER_API_KEY` set in environment
+- Optional: `GITHUB_TOKEN`, `EXA_API_KEY` for MCP server features
 
 ## Quick Start
 
 ### One-Time Setup
 ```bash
 # Clone and setup globally
-git clone https://github.com/anomalyco/multitui.git multitui
+git clone git@github.com:robchrob/multitui.git multitui
 cd multitui
 mtui setup
 ```
@@ -65,11 +67,13 @@ mtui start
 | Command | What |
 |---------|------|
 | `mtui setup` | Install/upgrade framework globally to ~/.multitui |
-| `mtui build` | Build the multitui Docker image |
-| `mtui init [stack]` | Scaffold new project, attach agent/, AI generates files |
-| `mtui bootstrap [instr]` | Analyze existing codebase, configure MultiTUI |
-| `mtui start [-p H:C]` | Start or resume OpenCode container |
-| `mtui clean` | Remove container for this project |
+| `mtui build [--no-cache]` | Build the multitui Docker image. Uses agent/docker/Dockerfile if present, falls back to ~/.multitui |
+| `mtui init [instruction]` | Scaffold new project, attach agent/, AI generates files |
+| `mtui bootstrap [instruction]` | Analyze existing codebase, configure MultiTUI |
+| `mtui start` | Start or resume |
+| `mtui start --tty` | Drop into bash shell instead of OpenCode |
+| `mtui start -p HOST:CONTAINER` | Expose extra port (repeatable) |
+| `mtui clean` / `mtui stop` | Remove container for this project |
 | `mtui list` | List all MultiTUI containers on machine |
 | `mtui status` | Show health of current project |
 
@@ -77,6 +81,14 @@ mtui start
 - **Ctrl+Z** inside OpenCode → detaches (container keeps running)
 - **`mtui start`** → resumes existing container
 - **`mtui clean`** → removes container (start fresh)
+
+## Resetting
+
+To reset the global framework:
+```bash
+./reset.sh
+```
+This removes `~/.multitui` and re-runs `mtui setup`.
 
 ## What Gets Generated
 `mtui init "stack"` and `mtui bootstrap` create:
@@ -115,7 +127,8 @@ my-project/
 | Location | Scope | Purpose |
 |----------|-------|---------|
 | `~/.config/opencode/opencode.json` | Global | User preferences |
-| `agent/config/opencode.json` | Global | Framework defaults (mounted into container) |
-| `AGENTS.md` | Project | Stack, commands, conventions |
+| `agent/config/opencode.json` | Per-project | Framework defaults (mounted into container) |
+| `AGENTS.md` | Per-project | Stack, commands, conventions |
 
-The container mounts `agent/config/opencode.json` as the base config, providing MCP servers (memory, context7, exa, github, deepwiki) and permissions.
+`agent/config/opencode.json` is mounted into every container, providing:
+**memory**, **sequential-thinking**, **context7**, **exa**, **github**, and **deepwiki** MCP servers out of the box.

@@ -270,8 +270,7 @@ docker cp app:/tmp/debug.tar.gz ./debug.tar.gz
 ## Best Practices
 
 1. ALWAYS use `docker compose exec` not `docker exec` (works with DooD)
-2. Use `sh` not `bash` (alpine images often lack bash)
-3. Check logs FIRST before shell access
-4. Use `jq` for JSON inspection: `docker inspect app | jq`
-5. For one-off debugging, use `--rm` to auto-cleanup
-6. Capture full context: logs + inspect + stats
+2. Check logs FIRST before shell access
+3. Use `jq` for JSON inspection: `docker inspect app | jq`
+4. For one-off debugging, use `--rm` to auto-cleanup
+5. Capture full context: logs + inspect + stats
