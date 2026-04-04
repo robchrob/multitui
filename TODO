@@ -1,2 +1,4 @@
 mtui custom - when we have changes in agent/ dir, we want to do develop-PROJECT_NAME.
 We want to do this as new entry in prompts/ and then spawn agent that will do all of it (go to agent/ check status, diff, write commit message, commit and push it to remote).
+
+known issue - we can do just one opencode instance not good
