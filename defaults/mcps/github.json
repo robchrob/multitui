@@ -1,0 +1,13 @@
+{
+  "type": "local",
+  "command": [
+    "docker", "run", "-i", "--rm",
+    "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+    "-e", "GITHUB_DYNAMIC_TOOLSETS=1",
+    "ghcr.io/github/github-mcp-server"
+  ],
+  "enabled": true,
+  "environment": {
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_TOKEN}"
+  }
+}
