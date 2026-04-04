@@ -38,6 +38,8 @@ RUN addgroup -g 998 docker 2>/dev/null || true && \
 USER dev
 WORKDIR /home/dev
 
+RUN mkdir -p /home/dev/.config
+
 RUN npm config set prefix /home/dev/.npm-global
 
 ENV PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
