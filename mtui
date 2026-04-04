@@ -14,7 +14,7 @@ shopt -s nullglob
 
 MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="git@github.com:robchrob/multitui.git"
-REMOTE_BRANCH="develop"
+REMOTE_BRANCH="develop-detach"
 #OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
 OPENCODE_DEFAULT_MODEL="opencode/qwen3.6-plus-free"
 
@@ -307,29 +307,43 @@ cmd_start() {
         esac
     done
 
-    if docker ps -aq -f name="^/${cn}$" | grep -q .; then
-        local mounted
-        mounted="$(docker inspect "$cn" --format '{{.Config.WorkingDir}}' 2>/dev/null || true)"
-        if [[ "$mounted" != "$PWD" ]]; then
-            _err "Container $cn exists but belongs to a different path: $mounted
-Run 'mtui clean' first to remove it."
+    docker images -q multitui | grep -q . || _err "No image. Run 'mtui build' first."
+
+    local container_exists
+    container_exists="$(docker ps -aq -f name="^/${cn}$" 2>/dev/null || true)"
+
+    if [[ -z "$container_exists" ]]; then
+        _log "Creating background container $cn..."
+        local flags=(-d --name "$cn")
+        _build_docker_flags flags "${port_args[@]+"${port_args[@]}"}"
+        flags+=(-v "$HOME/.ssh":/home/dev/.ssh:ro)
+
+        if [[ ${#port_args[@]} -gt 0 ]]; then
+            _log "Container will be created with ports: ${port_args[*]}"
+            _log "To change ports later, run 'mtui clean' first."
         fi
-        _log "Resuming $cn..."
-        exec docker start -ai "$cn"
+
+        docker run "${flags[@]}" multitui sleep infinity
+    else
+        local container_state
+        container_state="$(docker inspect -f '{{.State.Status}}' "$cn" 2>/dev/null || true)"
+        if [[ "$container_state" != "running" ]]; then
+            _log "Starting container $cn..."
+            docker start "$cn"
+        fi
+
+        if [[ ${#port_args[@]} -gt 0 ]]; then
+            _warn "Ports ${port_args[*]} ignored - container already exists."
+            _warn "To change ports, run 'mtui clean' first, then 'mtui start -p H:C'"
+        fi
     fi
 
-    docker images -q multitui | grep -q . || _err "No image. Run 'mtui build' first."
-    _log "Starting OpenCode..."
-
-    local flags=(-it --name "$cn" --detach-keys="ctrl-z")
-    _build_docker_flags flags "${port_args[@]+"${port_args[@]}"}"
-    flags+=(-v "$HOME/.ssh":/home/dev/.ssh:ro)
+    _log "Attaching to $cn..."
 
     if [[ "$mode" == "tty" ]]; then
-        exec docker run "${flags[@]}" multitui bash
+        docker exec -it "$cn" bash
     else
-        exec docker run "${flags[@]}" multitui \
-            opencode --model "$OPENCODE_DEFAULT_MODEL"
+        docker exec -it "$cn" opencode --model "$OPENCODE_DEFAULT_MODEL"
     fi
 }
 
@@ -389,16 +403,18 @@ show_help() {
     echo -e "${C_BOLD}Project Commands:${C_RESET}"
     echo "  init [instruction]        Scaffold new project, attach agent/, AI generates files"
     echo "  bootstrap [instruction]   Analyze existing codebase and configure MultiTUI"
-    echo "  start [--tty] [-p H:C]    Start or resume the OpenCode container for this project"
+    echo "  start [--tty] [-p H:C]    Start or resume OpenCode container for this project"
     echo "                            --tty   Drop into bash shell instead of OpenCode"
-    echo "                            -p H:C  Expose additional port (repeatable)"
+    echo "                            -p H:C  Expose additional port (set at creation)"
     echo "  stop, clean               Stop and remove the container for this project"
     echo "  status                    Show health and status of current project's setup"
     echo ""
     echo -e "${C_BOLD}Session Tips:${C_RESET}"
-    echo "  Ctrl+Z inside OpenCode → detach (container keeps running)"
-    echo "  mtui start → reattach to existing container"
-    echo "  mtui clean → discard container, start fresh next time"
+    echo "  Container runs in background - stays alive until 'mtui clean'"
+    echo "  mtui start → attach to running container, start OpenCode"
+    echo "  Ctrl+C / exit → detach from session, container keeps running"
+    echo "  Multiple terminals can each run 'mtui start' for parallel sessions"
+    echo "  mtui clean → stop container, start fresh next time"
     echo ""
     echo -e "${C_DIM}Run 'mtui <command> --help' for more info on a command.${C_RESET}"
 }
