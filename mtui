@@ -122,17 +122,17 @@ _build_docker_flags() {
     done
 
     _flags_ref+=(
-        -v "$PWD":"$PWD"
-        -w "$PWD"
+        -v "$PWD":/workspace
+        -w /workspace
         --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
         -v /var/run/docker.sock:/var/run/docker.sock
         -e OPENROUTER_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e OPENCODE_CONFIG="$PWD/defaults/opencode.json"
-        -e OPENCODE_CONFIG_DIR="$PWD/defaults"
+        -e OPENCODE_CONFIG=/workspace/defaults/opencode.json
+        -e OPENCODE_CONFIG_DIR=/workspace/defaults
         -e GITHUB_TOKEN
         -e EXA_API_KEY
-        -e PROJECT_ROOT="$PWD"
+        -e PROJECT_ROOT=/workspace
     )
 
     [[ -f "$HOME/.config/uv/uv.toml" ]] && _flags_ref+=(-v "$HOME/.config/uv/uv.toml:/home/dev/.config/uv/uv.toml")
