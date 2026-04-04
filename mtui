@@ -134,7 +134,9 @@ _build_docker_flags() {
         -e PROJECT_ROOT="$PWD"
     )
 
-    [[ ${#extra_ports[@]} -gt 0 ]] && _flags_ref+=("${extra_ports[@]}")
+    if [[ ${#extra_ports[@]} -gt 0 ]]; then
+        _flags_ref+=("${extra_ports[@]}")
+    fi
 }
 
 _run_opencode() {
@@ -205,8 +207,8 @@ cmd_build() {
         if [[ -z "$no_cache" ]]; then
             _log "Checking for OpenCode updates..."
             local current_version latest_version
-            current_version="$(docker run --rm multitui opencode --version 2>/dev/null | tr -d '[:space:]' | sed 's/^v//')"
-            latest_version="$(curl -fsSL https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name' | sed 's/^v//')"
+            current_version="$(docker run --rm multitui opencode --version 2>/dev/null | tr -d '[:space:]' | sed 's/^v//' || true)"
+            latest_version="$(curl -fsSL https://api.github.com/repos/anomalyco/opencode/releases/latest 2>/dev/null | jq -r '.tag_name' 2>/dev/null | sed 's/^v//' || true)"
 
             if [[ -n "$latest_version" && "$current_version" != "$latest_version" ]]; then
                 _log "OpenCode v$current_version → v$latest_version (update available)"
@@ -339,7 +341,7 @@ cmd_clean() {
 
 cmd_list() {
     echo -e "${C_BOLD}MultiTUI Active Projects:${C_RESET}\n"
-    docker ps -a --filter "name=^mtui-" --format "table {{.Names}}\t{{.State}}\t{{.Status}}" | sed 's/^mtui-//'
+    docker ps -a --filter "name=^mtui-" --format "table {{.Names}}\t{{.State}}\t{{.Status}}" | sed 's/^mtui-//' || true
     echo ""
 }
 
