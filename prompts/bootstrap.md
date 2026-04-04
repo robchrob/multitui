@@ -75,7 +75,12 @@ Include these six sections:
 
 #### 1. Header
   # [project name]
-  [one-line description of what the project does]
+  [one-line description]
+
+  ## Environment
+  This project uses MultiTUI — OpenCode runs inside a Docker container with DooD access.
+  CRITICAL: Load @agent/AGENTS.md for full execution environment details.
+  All code execution uses: docker / docker compose
 
 #### 2. Stack
 Exact versions only — not what's inferable from package.json.
@@ -127,19 +132,17 @@ If everything follows standard conventions, omit this section entirely.
   [Only non-obvious, project-specific rules — e.g. error handling patterns,
   state management constraints, module boundaries, naming deviations, etc.]
 
-#### 5. Permissions (three-tier allow/deny)
-Give the agent explicit operating boundaries so it never has to guess what's safe.
+#### 5. Permissions
   ## Permissions
   ### Allowed without asking
-  - Everything but (below)
-
+  - All project files (outside agent/)
+  
   ### Ask first
-  - Modify DooD config in agent/
-  - Modify DooD agent/docker/Dockerfile
-
+  - Modify agent/ directory (MultiTUI framework - see @agent/AGENTS.md)
+  
   ### Never do
-  - Read or modify .env files
-  - Hard-code secrets, API keys, or credentials anywhere
+  - Commit changes to agent/ submodule
+  - Read .env files
 
 #### 6. context7 IDs
 List every library ID you resolved during this session so future sessions can skip resolve-library-id entirely.
