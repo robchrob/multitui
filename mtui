@@ -128,8 +128,8 @@ _build_docker_flags() {
         -v /var/run/docker.sock:/var/run/docker.sock
         -e OPENROUTER_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e OPENCODE_CONFIG=/workspace/defaults/opencode.json
-        -e OPENCODE_CONFIG_DIR=/workspace/defaults
+        -e OPENCODE_CONFIG=/workspace/agent/defaults/opencode.json
+        -e OPENCODE_CONFIG_DIR=/workspace/agent/defaults
         -e GITHUB_TOKEN
         -e EXA_API_KEY
         -e PROJECT_ROOT=/workspace
@@ -343,7 +343,11 @@ cmd_start() {
     if [[ "$mode" == "tty" ]]; then
         docker exec -it "$cn" bash
     else
-        docker exec -it "$cn" opencode --model "$OPENCODE_DEFAULT_MODEL"
+        if [[ -t 0 ]]; then
+            docker exec -it "$cn" opencode --model "$OPENCODE_DEFAULT_MODEL"
+        else
+            docker exec -i "$cn" opencode --model "$OPENCODE_DEFAULT_MODEL"
+        fi
     fi
 }
 
