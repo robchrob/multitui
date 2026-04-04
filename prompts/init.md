@@ -161,4 +161,20 @@ List every library ID you resolved during this session so future sessions can sk
 - Port mappings, any backing services with healthchecks
 - Pass PROJECT_ROOT as env var
 
+### .gitignore / .dockerignore
+Generate a comprehensive .gitignore / .dockerignore for the detected stack covering:
+- agent/ directory
+- Language artifacts (node_modules/, __pycache__/, target/, vendor/, etc.)
+- Package manager files (bun.lockb if using text lockfile, .uv/, go.sum if vendored)
+- Build outputs (dist/, build/, *.egg-info/, bin/)
+- Environment files (.env, .env.local, .env.*.local, !.env.example)
+- IDE/editor files (.idea/, .vscode/, *.swp, *.swo, *~)
+- OS files (.DS_Store, Thumbs.db, desktop.ini)
+- Logs (*.log, logs/, *.log.*)
+- Coverage reports (coverage/, .coverage, *.lcov)
+- Temporary files (*.tmp, .tmp/, *.cache)
+- Docker artifacts (agent/docker/.cache/ if applicable)
+
+Include stack-specific patterns based on detected framework (e.g., Next.js: .next/, SvelteKit: .svelte-kit/, Vite: .vite/).
+
 Write all files directly.
