@@ -148,4 +148,18 @@ List every library ID you resolved during this session so future sessions can sk
   - [library name]: [/org/repo-id]
   ...
 
+### 6. .gitignore / .dockerignore
+Check for existing .gitignore / .dockerfile first. If missing or incomplete, generate one that covers:
+- agent/ directory
+- Language-specific artifacts (node_modules/, __pycache__/, target/, etc.)
+- Package manager caches (bun.lockb if using text lock, .uv/, etc.)
+- Build outputs (dist/, build/, *.egg-info/)
+- Environment files (.env, .env.local, .env.*.local)
+- IDE/editor files (.idea/, .vscode/, *.swp, *.swo)
+- OS files (.DS_Store, Thumbs.db)
+- Logs (*.log, logs/)
+- Docker artifacts if applicable
+
+If .gitignore exists, append missing patterns rather than overwriting. Never remove existing entries.
+
 Write all files directly.
