@@ -67,7 +67,7 @@ _ensure_gitignore_entry() {
 
     touch "$file"
 
-    for entry in "agent/" ".opencode/"; do
+    for entry in "agent/"; do
         if ! grep -qxF "$entry" "$file"; then
             printf '\n%s\n' "$entry" >> "$file"
             _log "Added $entry to .gitignore"
@@ -99,34 +99,6 @@ _attach() {
     git -C agent reset --hard "origin/$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
 }
 
-_scaffold() {
-    _log "Scaffolding .opencode structure..."
-    mkdir -p .opencode/{agents,commands,skills}
-
-    if [[ -d "agent/defaults/skills" ]]; then
-        for f in agent/defaults/skills/*/SKILL.md; do
-            [[ -f "$f" ]] || continue
-            local name
-            name="$(basename "$(dirname "$f")")"
-            mkdir -p ".opencode/skills/$name"
-            if [[ ! -f ".opencode/skills/$name/SKILL.md" ]]; then
-                ln -sf "$f" ".opencode/skills/$name/SKILL.md"
-            fi
-        done
-    fi
-
-    if [[ -d "agent/defaults/commands" ]]; then
-        for f in agent/defaults/commands/*.md; do
-            [[ -f "$f" ]] || continue
-            local name
-            name="$(basename "$f" .md)"
-            if [[ ! -f ".opencode/commands/$name.md" ]]; then
-                ln -sf "$f" ".opencode/commands/$name.md"
-            fi
-        done
-    fi
-}
-
 # Build the common docker flags array used by both _run_opencode and cmd_start.
 # Appends into the named array variable passed as $1.
 # Usage: _build_docker_flags my_array [-p HOST:CONTAINER ...]
@@ -144,29 +116,25 @@ _build_docker_flags() {
                 extra_ports+=("-p" "$2")
                 shift 2
                 ;;
-            *)
-                shift
-                ;;
+            *) shift ;;
         esac
     done
 
     _flags_ref+=(
         -v "$PWD":"$PWD"
         -w "$PWD"
-        -v "$PWD/agent/config/opencode.json":/home/dev/.config/opencode/opencode.json:ro
         --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
         -v /var/run/docker.sock:/var/run/docker.sock
         -e OPENROUTER_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
+        -e OPENCODE_CONFIG="$PWD/agent/config/opencode.json"
+        -e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
         -e GITHUB_TOKEN
         -e EXA_API_KEY
         -e PROJECT_ROOT="$PWD"
     )
 
-    # FIX: Use safer expansion to avoid issues with empty arrays and set -u
-    if [[ ${#extra_ports[@]} -gt 0 ]]; then
-        _flags_ref+=("${extra_ports[@]}")
-    fi
+    [[ ${#extra_ports[@]} -gt 0 ]] && _flags_ref+=("${extra_ports[@]}")
 }
 
 _run_opencode() {
@@ -214,11 +182,9 @@ cmd_build() {
         shift
     done
 
-    local build_args=(
-        --build-arg HOST_UID="$(id -u)"
-        --build-arg HOST_GID="$(id -g)"
-    )
-
+    # Prefer agent/docker/Dockerfile from the local project clone when available,
+    # so the locally-checked-out agent is actually used rather than always deferring
+    # to the globally-installed ~/.multitui copy.
     local dockerfile_dir
     if [[ -f "agent/docker/Dockerfile" ]]; then
         dockerfile_dir="$PWD/agent/docker"
@@ -229,6 +195,11 @@ cmd_build() {
     else
         _err "No Dockerfile found. Run 'mtui setup' first, or attach an agent with 'mtui init'."
     fi
+
+    local build_args=(
+        --build-arg HOST_UID="$(id -u)"
+        --build-arg HOST_GID="$(id -g)"
+    )
 
     if docker images -q multitui | grep -q .; then
         if [[ -z "$no_cache" ]]; then
@@ -267,10 +238,9 @@ cmd_init() {
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
     _attach
-    _scaffold
 
-    local template_file="agent/defaults/templates/init.md"
-    [[ -r "$template_file" ]] || _err "Missing template: $template_file"
+    local template_file="agent/prompts/init.md"
+    [[ -r "$template_file" ]] || _err "Missing prompt: $template_file"
 
     _run_opencode "$(_render_template "$template_file" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
@@ -283,20 +253,17 @@ cmd_bootstrap() {
 
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
-    _log "Step 1/4: Attaching agent..."
+    _log "Step 1/3: Attaching agent..."
     _attach
 
-    _log "Step 2/4: Scaffolding..."
-    _scaffold
-
-    _log "Step 3/4: Rendering template..."
-    local template_file="agent/defaults/templates/bootstrap.md"
-    [[ -r "$template_file" ]] || _err "Missing template: $template_file"
+    _log "Step 2/3: Rendering prompt..."
+    local template_file="agent/prompts/bootstrap.md"
+    [[ -r "$template_file" ]] || _err "Missing prompt: $template_file"
 
     local template_content
     template_content="$(_render_template "$template_file" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
 
-    _log "Step 4/4: Running OpenCode analysis..."
+    _log "Step 3/3: Running OpenCode analysis..."
     _run_opencode "$template_content"
 
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
@@ -308,7 +275,6 @@ cmd_start() {
     if [[ ! -d "agent" ]]; then
         _log "Agent missing, attaching..."
         _attach
-        _scaffold
     fi
 
     local cn mode
