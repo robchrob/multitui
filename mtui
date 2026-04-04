@@ -134,6 +134,9 @@ _build_docker_flags() {
         -e PROJECT_ROOT="$PWD"
     )
 
+    [[ -f "$HOME/.config/uv/uv.toml" ]] && _flags_ref+=(-v "$HOME/.config/uv/uv.toml:/home/dev/.config/uv/uv.toml")
+    [[ -f "$HOME/.bunfig.toml" ]] && _flags_ref+=(-v "$HOME/.bunfig.toml:/home/dev/.bunfig.toml")
+
     if [[ ${#extra_ports[@]} -gt 0 ]]; then
         _flags_ref+=("${extra_ports[@]}")
     fi
