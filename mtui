@@ -127,8 +127,8 @@ _build_docker_flags() {
         -v /var/run/docker.sock:/var/run/docker.sock
         -e OPENROUTER_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e OPENCODE_CONFIG="$PWD/agent/config/opencode.json"
-        -e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
+        -e OPENCODE_CONFIG="$PWD/defaults/opencode.json"
+        -e OPENCODE_CONFIG_DIR="$PWD/defaults"
         -e GITHUB_TOKEN
         -e EXA_API_KEY
         -e PROJECT_ROOT="$PWD"
