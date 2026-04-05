@@ -15,6 +15,7 @@ MTUI_LINK="$HOME/.local/bin/mtui"
 
 setup() {
     log_info "Setting up setup test environment..."
+    # Remove only our own installation artifacts — don't nuke unrelated config
     rm -rf "$MTUI_HOME" 2>/dev/null || true
     rm -f  "$MTUI_LINK" 2>/dev/null || true
 }
@@ -23,6 +24,7 @@ teardown() {
     log_info "Teardown complete (leaving ~/.multitui in place for subsequent tests)"
 }
 
+# Real test: mtui setup clones the framework to ~/.multitui
 test_setup_install() {
     log_test "mtui setup installs framework to ~/.multitui..."
 
@@ -36,6 +38,7 @@ test_setup_install() {
     log_pass "Framework installed to $MTUI_HOME"
 }
 
+# Real test: mtui is symlinked to ~/.local/bin/mtui and is executable
 test_setup_links_binary() {
     log_test "mtui binary is linked at ~/.local/bin/mtui..."
 
@@ -54,11 +57,13 @@ test_setup_links_binary() {
     log_pass "mtui linked and executable at $MTUI_LINK"
 }
 
+# Real test: the installed binary exits 0 on --help
 test_setup_installed_binary_works() {
     log_test "Installed mtui binary responds to --help..."
 
-    "$MTUI_LINK" --help 2>&1 | grep -qi "usage\|mtui\|command" || {
-        log_fail "Installed mtui --help output is unexpected"
+    # Use exit code only — ANSI escape codes make grep unreliable here
+    "$MTUI_LINK" --help >/dev/null 2>&1 || {
+        log_fail "Installed mtui --help exited non-zero"
         return 1
     }
 

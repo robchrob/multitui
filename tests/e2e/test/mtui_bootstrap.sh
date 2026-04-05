@@ -1,6 +1,9 @@
 #!/bin/bash
 # mtui bootstrap tests — validates analysis of existing projects
 # Requires OPENROUTER_API_KEY
+#
+# Design: ONE `mtui bootstrap` call per stack. All assertions reuse the
+# same generated directory — no redundant AI runs.
 
 set -Eeuo pipefail
 
@@ -15,6 +18,9 @@ source "$LIB_DIR/fixtures.sh"
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
 TEST_TMP_DIR="/tmp/mtui_test_$$"
 
+PY_DIR=""
+JS_DIR=""
+
 setup() {
     if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
         log_fail "OPENROUTER_API_KEY is required for bootstrap tests"
@@ -23,79 +29,91 @@ setup() {
 
     mkdir -p "$TEST_TMP_DIR"
     log_info "Setting up bootstrap test environment..."
+    # Image presence is guaranteed by run.sh before any suite executes.
 
-    if ! docker_image_exists "$MTUI_IMAGE"; then
-        log_info "Building multitui image..."
-        "$REPO_ROOT/mtui" build || { log_fail "Build failed"; exit 1; }
+    # --- Run mtui bootstrap for both stacks in parallel ---
+    PY_DIR="$TEST_TMP_DIR/bootstrap-py"
+    create_minimal_py "$PY_DIR"
+    echo "# SENTINEL" > "$PY_DIR/Dockerfile"
+    JS_DIR="$TEST_TMP_DIR/bootstrap-js"
+    create_minimal_js "$JS_DIR"
+
+    log_info "Running mtui bootstrap for Python and JS projects in parallel..."
+    (cd "$PY_DIR" && "$REPO_ROOT/mtui" bootstrap 2>&1) &
+    local py_pid=$!
+    (cd "$JS_DIR" && "$REPO_ROOT/mtui" bootstrap 2>&1) &
+    local js_pid=$!
+
+    # Wait for both to finish
+    local py_ok=0 js_ok=0
+    wait "$py_pid" && py_ok=1 || true
+    wait "$js_pid" && js_ok=1 || true
+
+    if [[ $py_ok -eq 0 ]]; then
+        log_fail "Python bootstrap failed"
+        exit 1
     fi
+    if [[ $js_ok -eq 0 ]]; then
+        log_fail "JS bootstrap failed"
+        exit 1
+    fi
+    log_info "Both bootstrap sessions completed successfully"
 }
 
 teardown() {
+    local status="${1:-unknown}"
+    local run_dir
+    run_dir="$REPO_ROOT/tests/e2e/output/$(date +%Y%m%d_%H%M%S)_bootstrap_${status}"
+    mkdir -p "$run_dir"
+
+    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py"
+    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js"
+
+    log_info "Artifacts saved to $run_dir"
     rm -rf "$TEST_TMP_DIR"
 }
 
+# ── Python assertions ──────────────────────────────────────────────────────
+
+test_bootstrap_python_generates_agents_md() {
+    log_test "Python bootstrap generates AGENTS.md..."
+    assert_file_exists "$PY_DIR/AGENTS.md" "AGENTS.md not generated" || return 1
+    log_pass "AGENTS.md generated"
+}
+
 test_bootstrap_python_detects_stack() {
-    log_test "mtui bootstrap detects Python/uv stack correctly..."
+    log_test "Python bootstrap detects Python/uv stack..."
 
-    local project_dir="$TEST_TMP_DIR/bootstrap-py-$$"
-    create_minimal_py "$project_dir"
+    local agents="$PY_DIR/AGENTS.md"
+    assert_file_exists "$agents" || return 1
 
-    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
+    if ! grep -qi "python\|uv" "$agents"; then
+        log_fail "AGENTS.md does not mention Python or uv"
+        return 1
+    fi
 
-    local agents="$project_dir/AGENTS.md"
-    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
-
-    assert_contains "$agents" -i "python\|uv"  "Must detect Python/uv stack" || return 1
-    assert_not_contains "$agents" "bun run"    "Python project must not reference bun" || return 1
+    if grep -q "bun run" "$agents"; then
+        log_fail "Python AGENTS.md references bun run — wrong stack"
+        return 1
+    fi
 
     log_pass "Python stack detected correctly"
 }
 
-test_bootstrap_js_detects_stack() {
-    log_test "mtui bootstrap detects JS/bun stack correctly..."
+test_bootstrap_python_commands_use_docker_compose() {
+    log_test "Python AGENTS.md Commands section uses docker compose..."
 
-    local project_dir="$TEST_TMP_DIR/bootstrap-js-$$"
-    create_minimal_js "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
-
-    local agents="$project_dir/AGENTS.md"
-    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
-
-    assert_contains "$agents" -i "bun\|node\|vite" "Must detect JS stack" || return 1
-    assert_not_contains "$agents" "uv run"          "JS project must not reference uv" || return 1
-
-    log_pass "JS stack detected correctly"
-}
-
-test_bootstrap_commands_use_docker_compose() {
-    log_test "AGENTS.md Commands section uses docker compose..."
-
-    local project_dir="$TEST_TMP_DIR/bootstrap-cmds-$$"
-    create_minimal_py "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
-
-    local agents="$project_dir/AGENTS.md"
-    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
-
-    assert_contains "$agents" "## Commands"   "Missing Commands section"              || return 1
-    assert_contains "$agents" "docker compose" "Commands must use docker compose"     || return 1
+    local agents="$PY_DIR/AGENTS.md"
+    assert_contains "$agents" "## Commands"    "Missing Commands section"   || return 1
+    assert_contains "$agents" "docker compose" "Commands must use docker compose" || return 1
 
     log_pass "Commands section uses docker compose"
 }
 
 test_bootstrap_preserves_existing_dockerfile() {
-    log_test "mtui bootstrap does not overwrite an existing Dockerfile..."
+    log_test "bootstrap does not overwrite an existing Dockerfile..."
 
-    local project_dir="$TEST_TMP_DIR/bootstrap-preserve-$$"
-    create_minimal_py "$project_dir"
-
-    echo "# SENTINEL" > "$project_dir/Dockerfile"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
-
-    if ! grep -q "SENTINEL" "$project_dir/Dockerfile"; then
+    if ! grep -q "SENTINEL" "$PY_DIR/Dockerfile"; then
         log_fail "Existing Dockerfile was overwritten by bootstrap"
         return 1
     fi
@@ -103,20 +121,48 @@ test_bootstrap_preserves_existing_dockerfile() {
     log_pass "Existing Dockerfile preserved"
 }
 
-test_bootstrap_attaches_agent() {
-    log_test "mtui bootstrap attaches the agent/ directory..."
+# ── JS assertions ──────────────────────────────────────────────────────────
 
-    local project_dir="$TEST_TMP_DIR/bootstrap-agent-$$"
-    create_minimal_py "$project_dir"
+test_bootstrap_js_generates_agents_md() {
+    log_test "JS bootstrap generates AGENTS.md..."
+    assert_file_exists "$JS_DIR/AGENTS.md" "AGENTS.md not generated" || return 1
+    log_pass "AGENTS.md generated"
+}
 
-    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
+test_bootstrap_js_detects_stack() {
+    log_test "JS bootstrap detects JS/bun stack..."
 
-    if [[ ! -d "$project_dir/agent" ]]; then
-        log_fail "agent/ directory missing after bootstrap"
+    local agents="$JS_DIR/AGENTS.md"
+    assert_file_exists "$agents" || return 1
+
+    if ! grep -qi "bun\|node\|vite" "$agents"; then
+        log_fail "AGENTS.md does not mention bun, node, or vite"
         return 1
     fi
 
-    log_pass "agent/ directory attached"
+    if grep -q "uv run" "$agents"; then
+        log_fail "JS AGENTS.md references uv run — wrong stack"
+        return 1
+    fi
+
+    log_pass "JS stack detected correctly"
+}
+
+# ── Shared ─────────────────────────────────────────────────────────────────
+
+test_bootstrap_attaches_agent() {
+    log_test "bootstrap attaches the agent/ directory..."
+
+    local failed=0
+    for dir in "$PY_DIR" "$JS_DIR"; do
+        if [[ ! -d "$dir/agent" ]]; then
+            log_fail "agent/ missing in $dir"
+            failed=1
+        fi
+    done
+
+    [[ $failed -eq 0 ]] && log_pass "agent/ attached in both projects"
+    return $failed
 }
 
 main() {
@@ -125,22 +171,20 @@ main() {
     local passed=0 failed=0
 
     for fn in \
+        test_bootstrap_python_generates_agents_md \
         test_bootstrap_python_detects_stack \
-        test_bootstrap_js_detects_stack \
-        test_bootstrap_commands_use_docker_compose \
+        test_bootstrap_python_commands_use_docker_compose \
         test_bootstrap_preserves_existing_dockerfile \
+        test_bootstrap_js_generates_agents_md \
+        test_bootstrap_js_detects_stack \
         test_bootstrap_attaches_agent; do
         log_test "Running $fn..."
-        if $fn; then
-            log_pass "$fn"
-            ((passed++)) || true
-        else
-            log_fail "$fn"
-            ((failed++)) || true
+        if $fn; then log_pass "$fn"; ((passed++)) || true
+        else          log_fail "$fn"; ((failed++)) || true
         fi
     done
 
-    teardown
+    teardown "$( [[ $failed -eq 0 ]] && echo pass || echo fail )"
     echo ""
     log_info "Results: $passed passed, $failed failed"
     [[ $failed -eq 0 ]]
