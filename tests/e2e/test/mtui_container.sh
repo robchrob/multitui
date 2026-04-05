@@ -15,6 +15,7 @@ source "$LIB_DIR/fixtures.sh"
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
 TEST_TMP_DIR="/tmp/mtui_test_$$"
 
+# Derive the container name the same way mtui does
 _expected_container_name() {
     local dir="$1"
     echo "mtui-$(basename "$dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
@@ -23,18 +24,16 @@ _expected_container_name() {
 setup() {
     mkdir -p "$TEST_TMP_DIR"
     log_info "Setting up container lifecycle test environment..."
-
-    if ! docker_image_exists "$MTUI_IMAGE"; then
-        log_info "Building multitui image first..."
-        "$REPO_ROOT/mtui" build || { log_fail "Image build failed"; exit 1; }
-    fi
+    # Image presence is guaranteed by run.sh before any suite executes.
 }
 
 teardown() {
+    # Best-effort cleanup of any containers created by this test run
     docker ps -aq --filter "name=^/mtui-mtui-fixture" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
     rm -rf "$TEST_TMP_DIR"
 }
 
+# Real test: `mtui start` creates a background container with the correct name
 test_start_creates_named_container() {
     log_test "mtui start creates a correctly-named background container..."
 
@@ -44,12 +43,18 @@ test_start_creates_named_container() {
     local expected_cn
     expected_cn="$(_expected_container_name "$project_dir")"
 
+    # Clean up stale container if any
     docker rm -f "$expected_cn" 2>/dev/null || true
 
+    # start requires OPENROUTER_API_KEY but the container creation itself happens
+    # before OpenCode is exec'd — we only need the background container to appear.
+    # We export a dummy key so the env check passes; OpenCode won't be exec'd in
+    # this path because we immediately check container state and clean up.
     OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-dummy}" \
         (cd "$project_dir" && timeout 15 "$REPO_ROOT/mtui" start 2>&1) &
     local bg_pid=$!
 
+    # Wait up to 10s for the container to appear
     local elapsed=0
     while [[ $elapsed -lt 10 ]]; do
         if docker_container_exists "$expected_cn"; then
@@ -59,6 +64,7 @@ test_start_creates_named_container() {
         ((elapsed++)) || true
     done
 
+    # Kill the bg start process (we don't need OpenCode to actually run)
     kill "$bg_pid" 2>/dev/null || true
     wait "$bg_pid" 2>/dev/null || true
 
@@ -71,6 +77,7 @@ test_start_creates_named_container() {
     fi
 }
 
+# Real test: `mtui status` reports correct state (no container → Not Created)
 test_status_no_container() {
     log_test "mtui status reports 'Not Created' when no container exists..."
 
@@ -92,6 +99,7 @@ test_status_no_container() {
     fi
 }
 
+# Real test: `mtui status` reports Running after container is up
 test_status_running_after_start() {
     log_test "mtui status reports Running after container is started..."
 
@@ -102,6 +110,7 @@ test_status_running_after_start() {
     expected_cn="$(_expected_container_name "$project_dir")"
     docker rm -f "$expected_cn" 2>/dev/null || true
 
+    # Manually create the container the same way mtui start does (background sleep)
     docker run -d --name "$expected_cn" \
         -v "$project_dir:$project_dir" \
         -w "$project_dir" \
@@ -120,6 +129,7 @@ test_status_running_after_start() {
     fi
 }
 
+# Real test: `mtui clean` removes the container
 test_clean_removes_container() {
     log_test "mtui clean removes the project container..."
 
@@ -129,6 +139,7 @@ test_clean_removes_container() {
     local expected_cn
     expected_cn="$(_expected_container_name "$project_dir")"
 
+    # Manually create the container so we can test clean
     docker run -d --name "$expected_cn" "$MTUI_IMAGE" sleep infinity >/dev/null
 
     (cd "$project_dir" && "$REPO_ROOT/mtui" clean 2>&1)
@@ -142,6 +153,7 @@ test_clean_removes_container() {
     log_pass "Container removed by mtui clean"
 }
 
+# Real test: `mtui list` shows the running container
 test_list_shows_running_container() {
     log_test "mtui list shows a running project container..."
 
@@ -158,6 +170,7 @@ test_list_shows_running_container() {
 
     docker rm -f "$expected_cn" 2>/dev/null || true
 
+    # mtui list strips the "mtui-" prefix in output
     local short_name
     short_name="${expected_cn#mtui-}"
 

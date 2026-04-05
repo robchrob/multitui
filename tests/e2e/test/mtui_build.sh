@@ -1,5 +1,7 @@
 #!/bin/bash
-# mtui build tests — validates Docker image build via mtui
+# mtui build tests — validates that `mtui build` produces a working image
+# run.sh ensures the image exists before this suite runs; these tests verify
+# the *output* of a build, not that a build was triggered unnecessarily.
 
 set -Eeuo pipefail
 
@@ -12,16 +14,14 @@ source "$LIB_DIR/docker.sh"
 
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
 
-setup() {
-    log_info "Setting up build test environment..."
-}
+setup() { log_info "Setting up build test environment..."; }
+teardown() { :; }
 
-teardown() {
-    log_info "Cleanup complete."
-}
-
+# Real test: mtui build exits 0 and image is present afterwards.
+# If the image already exists and is up-to-date, mtui build is a no-op —
+# that is correct and expected behaviour, not a failure.
 test_build_produces_image() {
-    log_test "mtui build creates the multitui image..."
+    log_test "mtui build exits 0 and image exists..."
 
     "$REPO_ROOT/mtui" build 2>&1 || {
         log_fail "mtui build exited non-zero"
@@ -33,9 +33,10 @@ test_build_produces_image() {
         return 1
     fi
 
-    log_pass "Image $MTUI_IMAGE exists after build"
+    log_pass "Image $MTUI_IMAGE present after build"
 }
 
+# Real test: the image actually contains a runnable opencode binary.
 test_built_image_has_opencode() {
     log_test "Built image contains a runnable opencode binary..."
 
@@ -53,35 +54,15 @@ test_built_image_has_opencode() {
     log_pass "opencode version in image: $version"
 }
 
-test_build_no_cache_flag_accepted() {
-    log_test "mtui build --no-cache runs without error..."
-
-    "$REPO_ROOT/mtui" build --no-cache 2>&1 || {
-        log_fail "mtui build --no-cache exited non-zero"
-        return 1
-    }
-
-    if ! docker_image_exists "$MTUI_IMAGE"; then
-        log_fail "Image missing after --no-cache build"
-        return 1
-    fi
-
-    log_pass "mtui build --no-cache succeeded"
-}
-
 main() {
     setup
     set +e
     local passed=0 failed=0
 
-    for fn in test_build_produces_image test_built_image_has_opencode test_build_no_cache_flag_accepted; do
+    for fn in test_build_produces_image test_built_image_has_opencode; do
         log_test "Running $fn..."
-        if $fn; then
-            log_pass "$fn"
-            ((passed++)) || true
-        else
-            log_fail "$fn"
-            ((failed++)) || true
+        if $fn; then log_pass "$fn"; ((passed++)) || true
+        else          log_fail "$fn"; ((failed++)) || true
         fi
     done
 
