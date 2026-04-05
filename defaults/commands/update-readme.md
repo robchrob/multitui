@@ -2,7 +2,8 @@
 description: Update README.md based on git history since last README edit
 argument-hint:
 ---
-Analyze commits since README.md was last modified, extract diffs and commit metadata, then rewrite README.md to reflect current state.
+
+Analyze commits since README.md was last modified, extract diffs and commit metadata, then rewrite README.md in Hermes-style: punchy one-liner, feature highlights table, copy-paste install, CLI reference table, docs links, minimal contributing section.
 
 ## Execution Steps
 
@@ -29,43 +30,79 @@ rm -rf /tmp/update_readme_analysis
 mkdir -p /tmp/update_readme_analysis
 
 git diff "$RANGE" --stat                          > /tmp/update_readme_analysis/files_changed.txt
-git diff --name-status "$RANGE"                   > /tmp/update_readme_analysis/file_status.txt
-git log "$RANGE" --format="%H|%an|%ae|%s|%b"     > /tmp/update_readme_analysis/commits.txt
-git log "$RANGE" --oneline                         > /tmp/update_readme_analysis/oneline.txt
-
-# NEW: capture the full unified diff so every added/removed line is visible
-git diff --unified=5 "$RANGE"                     > /tmp/update_readme_analysis/full_diff.patch
+git diff --name-status "$RANGE"                  > /tmp/update_readme_analysis/file_status.txt
+git log "$RANGE" --format="%H|%an|%ae|%s|%b"    > /tmp/update_readme_analysis/commits.txt
+git log "$RANGE" --oneline                        > /tmp/update_readme_analysis/oneline.txt
+git diff --unified=5 "$RANGE"                    > /tmp/update_readme_analysis/full_diff.patch
 ```
 
-### Step 3: Read Full Diff + Current README (line by line audit)
+### Step 3: Analyze and Plan
 
-Read **all** analysis files including `full_diff.patch`, then read the current `README.md`.
+Read all analysis files, then read current README.md. Identify:
 
-Go through `README.md` **line by line** and cross-check each section against the full diff:
+1. **What is this project?** Write a punchy one-liner that completes: "A tool that..."
+2. **Key features** - extract 4-6 main features from `feat:` commits and file additions
+3. **Install command** - what's the one command to get started?
+4. **Core commands** - which CLI commands matter most?
+5. **Links needed** - docs, repo, any external resources
 
-- Does this heading still describe something that exists?
-- Are the commands, flags, or file paths shown here still accurate?
-- Are new features from `feat:` commits missing from this section?
-- Do any `BREAKING CHANGE:` footers invalidate what this section says?
-- Are there new files, scripts, or tools that belong here but aren't mentioned?
-- Are dependency versions or requirements still correct?
+### Step 4: Write Hermes-Style README
 
-Mark each section as: **up to date**, **needs update**, or **needs removal**.
+Structure:
 
-### Step 4: Rewrite README
+```markdown
+# [Project Name] — [One-liner]
 
-Apply only the changes identified in the audit. Specifically:
+<p align="center">
+  [Badges: docs, repo, license]
+</p>
 
-1. New features from `feat:` commits
-2. Breaking changes from `BREAKING CHANGE:` footers
-3. New commands, scripts, or tools added
-4. Updated file structure if project layout changed
-5. New dependencies or requirements
-6. API/configuration changes that affect usage
+[Feature description in 1-2 sentences + quick feature table]
 
-Preserve existing style, formatting, and all sections marked **up to date**.
+---
 
-### Step 5: Cleanup
+## Quick Install
+
+[One copy-paste command, no prerequisites except git]
+
+## Getting Started
+
+[3-4 essential commands: setup, first use, resume]
+
+## CLI Reference
+
+| Command | What |
+|---------|------|
+| [cmd] | [desc] |
+| [cmd] | [desc] |
+
+## Configuration
+
+[Key config locations if any]
+
+## Contributing
+
+[Minimal: clone + one command to test]
+
+## License
+
+[One line]
+```
+
+### Step 5: Rewrite README.md
+
+Apply the structure above. Keep:
+- Existing tone (if good)
+- Existing code examples that work
+- Accurate command syntax
+
+Update:
+- One-liner to reflect current state
+- Features table with new capabilities
+- CLI commands that exist now
+- Remove outdated sections
+
+### Step 6: Cleanup
 ```bash
 rm -rf /tmp/update_readme_analysis
 ```
@@ -74,5 +111,5 @@ rm -rf /tmp/update_readme_analysis
 
 Display summary:
 - Commits analyzed
-- Sections audited (up to date / updated / removed)
+- Sections rewritten
 - Key changes incorporated
