@@ -53,16 +53,12 @@ ensure_image() {
     }
 }
 
-# Tests that need no API key — run always
-NO_KEY_TESTS=(
+# All test suites — OPENROUTER_API_KEY is assumed to be set in the environment
+TEST_SUITES=(
     mtui_setup.sh       # installs framework, links binary
     mtui_build.sh       # builds Docker image, checks opencode binary
     mtui_opencode.sh    # binary version/help/env sanity
     mtui_container.sh   # start/status/clean/list lifecycle
-)
-
-# Tests that call OpenCode and generate files — require OPENROUTER_API_KEY
-KEY_TESTS=(
     mtui_init.sh        # full init workflow, file content checks
     mtui_bootstrap.sh   # full bootstrap workflow, stack detection
 )
@@ -99,26 +95,11 @@ run_suite() {
 run_all_tests() {
     local passed=0 failed=0 skipped=0
 
-    log_info "Running suites that do not require OPENROUTER_API_KEY..."
-    for suite in "${NO_KEY_TESTS[@]}"; do
+    for suite in "${TEST_SUITES[@]}"; do
         local full="$SCRIPT_DIR/$suite"
         [[ -f "$full" ]] || { log_skip "$suite (file not found)"; ((skipped++)) || true; continue; }
         if run_suite "$full"; then ((passed++)) || true; else ((failed++)) || true; fi
     done
-
-    if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
-        log_info "Running suites that require OPENROUTER_API_KEY..."
-        for suite in "${KEY_TESTS[@]}"; do
-            local full="$SCRIPT_DIR/$suite"
-            [[ -f "$full" ]] || { log_skip "$suite (file not found)"; ((skipped++)) || true; continue; }
-            if run_suite "$full"; then ((passed++)) || true; else ((failed++)) || true; fi
-        done
-    else
-        for suite in "${KEY_TESTS[@]}"; do
-            log_skip "$suite requires OPENROUTER_API_KEY"
-            ((skipped++)) || true
-        done
-    fi
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -140,26 +121,23 @@ Options:
     -h, --help             Show this help
 
 Environment Variables:
-    OPENROUTER_API_KEY   Required for init and bootstrap tests (AI generates files)
+    OPENROUTER_API_KEY   Required (init and bootstrap tests call OpenCode)
     GITHUB_TOKEN         Optional, for GitHub MCP
     EXA_API_KEY          Optional, for Exa MCP
     MTUI_TEST_VERBOSE    Set to 1 to enable verbose output
     MTUI_TEST_FILTER     Name pattern to filter suites
 
-Suites (no API key required):
+Suites:
     mtui_setup      — global install + binary link
     mtui_build      — Docker image build
     mtui_opencode   — opencode binary sanity
     mtui_container  — start / status / clean / list lifecycle
-
-Suites (OPENROUTER_API_KEY required):
     mtui_init       — project scaffolding + file content validation
     mtui_bootstrap  — existing project analysis + stack detection
 
 Examples:
-    $0                            Run all tests (AI tests skipped without key)
+    $0                            Run all suites
     $0 -f container               Run only container lifecycle tests
-    OPENROUTER_API_KEY=... $0     Run all tests including AI-generated file tests
 EOF
 }
 

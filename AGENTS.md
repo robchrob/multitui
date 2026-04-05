@@ -1,4 +1,5 @@
 # MultiTUI — Execution Environment
+> DEVMODE=local development execution of framework (no inside other project in agent/)
 > Submodule at `$PROJECT_ROOT/agent/`. Project rules → `AGENTS.md`.
 
 ## Execution Layers
