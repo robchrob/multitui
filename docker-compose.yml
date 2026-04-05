@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    volumes:
+      - ${PROJECT_ROOT:-.}:/app
+      - uv_cache:/root/.cache/uv
+      - /app/.venv
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app
+          ignore:
+            - .venv/
+            - node_modules/
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
+
+volumes:
+  uv_cache:
