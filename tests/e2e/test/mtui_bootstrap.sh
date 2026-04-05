@@ -1,204 +1,149 @@
 #!/bin/bash
-# mtui bootstrap tests - validates project analysis
-# Note: These tests require OPENROUTER_API_KEY for full AI execution
+# mtui bootstrap tests — validates analysis of existing projects
+# Requires OPENROUTER_API_KEY
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
 
 source "$LIB_DIR/test_helpers.sh"
 source "$LIB_DIR/docker.sh"
-source "$LIB_DIR/mtui.sh"
 source "$LIB_DIR/fixtures.sh"
 
-TEST_TMP_DIR="/tmp/mtui_test_$$"
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
+TEST_TMP_DIR="/tmp/mtui_test_$$"
 
 setup() {
+    if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+        log_fail "OPENROUTER_API_KEY is required for bootstrap tests"
+        exit 1
+    fi
+
     mkdir -p "$TEST_TMP_DIR"
     log_info "Setting up bootstrap test environment..."
-    
+
     if ! docker_image_exists "$MTUI_IMAGE"; then
         log_info "Building multitui image..."
-        local dockerfile="$SCRIPT_DIR/../../../docker/Dockerfile"
-        docker build -f "$dockerfile" -t "$MTUI_IMAGE" "$(dirname "$dockerfile")" || {
-            log_fail "Failed to build image"
-            exit 1
-        }
+        "$REPO_ROOT/mtui" build || { log_fail "Build failed"; exit 1; }
     fi
 }
 
 teardown() {
-    log_info "Cleaning up bootstrap test environment..."
-    docker rm -f mtui-test-bootstrap-$$ 2>/dev/null || true
-    rm -rf "$TEST_TMP_DIR" 2>/dev/null || true
+    rm -rf "$TEST_TMP_DIR"
 }
 
-test_bootstrap_js() {
-    log_test "Testing mtui bootstrap with existing JS project..."
-    
-    local project_dir="$TEST_TMP_DIR/test-js-bootstrap"
+test_bootstrap_python_detects_stack() {
+    log_test "mtui bootstrap detects Python/uv stack correctly..."
+
+    local project_dir="$TEST_TMP_DIR/bootstrap-py-$$"
+    create_minimal_py "$project_dir"
+
+    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
+
+    local agents="$project_dir/AGENTS.md"
+    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
+
+    assert_contains "$agents" -i "python\|uv"  "Must detect Python/uv stack" || return 1
+    assert_not_contains "$agents" "bun run"    "Python project must not reference bun" || return 1
+
+    log_pass "Python stack detected correctly"
+}
+
+test_bootstrap_js_detects_stack() {
+    log_test "mtui bootstrap detects JS/bun stack correctly..."
+
+    local project_dir="$TEST_TMP_DIR/bootstrap-js-$$"
     create_minimal_js "$project_dir"
-    
-    if [[ ! -d "$project_dir" ]]; then
-        log_fail "Failed to create fixture"
-        return 1
-    fi
-    
-    local mtui_script="$SCRIPT_DIR/../../../mtui"
-    log_info "Running mtui bootstrap for JS project..."
-    local output
-    output=$("$mtui_script" bootstrap "analyze existing project" 2>&1) || true
-    
-    log_info "bootstrap output: $output"
-    
-    if [[ -f "$project_dir/AGENTS.md" ]]; then
-        log_pass "AGENTS.md generated for JS project"
-    else
-        log_fail "AGENTS.md not generated"
-        return 1
-    fi
-    
-    return 0
+
+    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
+
+    local agents="$project_dir/AGENTS.md"
+    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
+
+    assert_contains "$agents" -i "bun\|node\|vite" "Must detect JS stack" || return 1
+    assert_not_contains "$agents" "uv run"          "JS project must not reference uv" || return 1
+
+    log_pass "JS stack detected correctly"
 }
 
-test_bootstrap_py() {
-    log_test "Testing mtui bootstrap with existing Python project..."
-    
-    local project_dir="$TEST_TMP_DIR/test-py-bootstrap"
+test_bootstrap_commands_use_docker_compose() {
+    log_test "AGENTS.md Commands section uses docker compose..."
+
+    local project_dir="$TEST_TMP_DIR/bootstrap-cmds-$$"
     create_minimal_py "$project_dir"
-    
-    if [[ ! -d "$project_dir" ]]; then
-        log_fail "Failed to create fixture"
-        return 1
-    fi
-    
-    local mtui_script="$SCRIPT_DIR/../../../mtui"
-    log_info "Running mtui bootstrap for Python project..."
-    local output
-    output=$("$mtui_script" bootstrap "python uv project" 2>&1) || true
-    
-    log_info "bootstrap output: $output"
-    
-    if [[ -f "$project_dir/AGENTS.md" ]]; then
-        log_pass "AGENTS.md generated for Python project"
-    else
-        log_fail "AGENTS.md not generated"
-        return 1
-    fi
-    
-    return 0
+
+    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
+
+    local agents="$project_dir/AGENTS.md"
+    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
+
+    assert_contains "$agents" "## Commands"   "Missing Commands section"              || return 1
+    assert_contains "$agents" "docker compose" "Commands must use docker compose"     || return 1
+
+    log_pass "Commands section uses docker compose"
 }
 
-test_bootstrap_agents_md_content() {
-    log_test "Testing AGENTS.md contains project analysis..."
-    
-    local project_dir="$TEST_TMP_DIR/test-agents-content"
-    create_minimal_js "$project_dir"
-    
-    local mtui_script="$SCRIPT_DIR/../../../mtui"
-    "$mtui_script" bootstrap "analyze existing project" 2>&1 || true
-    
-    if [[ ! -f "$project_dir/AGENTS.md" ]]; then
-        log_fail "AGENTS.md not generated"
-        return 1
-    fi
-    
-    local content
-    content=$(cat "$project_dir/AGENTS.md")
-    
-    if [[ ${#content} -lt 100 ]]; then
-        log_fail "AGENTS.md content too short"
-        return 1
-    fi
-    
-    log_pass "AGENTS.md has meaningful content"
-    return 0
-}
+test_bootstrap_preserves_existing_dockerfile() {
+    log_test "mtui bootstrap does not overwrite an existing Dockerfile..."
 
-test_bootstrap_stack_detected() {
-    log_test "Testing stack detection in bootstrap..."
-    
-    local project_dir="$TEST_TMP_DIR/test-stack-detect"
+    local project_dir="$TEST_TMP_DIR/bootstrap-preserve-$$"
     create_minimal_py "$project_dir"
-    
-    local mtui_script="$SCRIPT_DIR/../../../mtui"
-    "$mtui_script" bootstrap "analyze existing project" 2>&1 || true
-    
-    if [[ ! -f "$project_dir/AGENTS.md" ]]; then
-        log_fail "AGENTS.md not generated"
+
+    echo "# SENTINEL" > "$project_dir/Dockerfile"
+
+    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
+
+    if ! grep -q "SENTINEL" "$project_dir/Dockerfile"; then
+        log_fail "Existing Dockerfile was overwritten by bootstrap"
         return 1
     fi
-    
-    local content
-    content=$(cat "$project_dir/AGENTS.md")
-    
-    if echo "$content" | grep -qi "python\|uv"; then
-        log_pass "Stack (Python/uv) detected"
-    else
-        log_info "Stack detection content: $content"
-    fi
-    
-    return 0
+
+    log_pass "Existing Dockerfile preserved"
 }
 
-test_bootstrap_commands_section() {
-    log_test "Testing Commands section in AGENTS.md..."
-    
-    local project_dir="$TEST_TMP_DIR/test-commands-section"
+test_bootstrap_attaches_agent() {
+    log_test "mtui bootstrap attaches the agent/ directory..."
+
+    local project_dir="$TEST_TMP_DIR/bootstrap-agent-$$"
     create_minimal_py "$project_dir"
-    
-    local mtui_script="$SCRIPT_DIR/../../../mtui"
-    "$mtui_script" bootstrap "python project" 2>&1 || true
-    
-    if [[ ! -f "$project_dir/AGENTS.md" ]]; then
-        log_fail "AGENTS.md not generated"
+
+    (cd "$project_dir" && "$REPO_ROOT/mtui" bootstrap 2>&1)
+
+    if [[ ! -d "$project_dir/agent" ]]; then
+        log_fail "agent/ directory missing after bootstrap"
         return 1
     fi
-    
-    if grep -q "## Commands" "$project_dir/AGENTS.md"; then
-        log_pass "Commands section present"
-    else
-        log_fail "Commands section missing"
-        return 1
-    fi
-    
-    return 0
+
+    log_pass "agent/ directory attached"
 }
 
 main() {
-    set +e
-    local tests_passed=0
-    local tests_failed=0
-    
     setup
-    
-    local test_funcs=(
-        "test_bootstrap_js"
-        "test_bootstrap_py"
-        "test_bootstrap_agents_md_content"
-        "test_bootstrap_stack_detected"
-        "test_bootstrap_commands_section"
-    )
-    
-    for test_func in "${test_funcs[@]}"; do
-        echo "Running $test_func..."
-        if $test_func; then
-            echo "$test_func PASSED"
-            ((tests_passed++)) || true
+    set +e
+    local passed=0 failed=0
+
+    for fn in \
+        test_bootstrap_python_detects_stack \
+        test_bootstrap_js_detects_stack \
+        test_bootstrap_commands_use_docker_compose \
+        test_bootstrap_preserves_existing_dockerfile \
+        test_bootstrap_attaches_agent; do
+        log_test "Running $fn..."
+        if $fn; then
+            log_pass "$fn"
+            ((passed++)) || true
         else
-            echo "$test_func FAILED"
-            ((tests_failed++)) || true
+            log_fail "$fn"
+            ((failed++)) || true
         fi
     done
-    
+
     teardown
-    
     echo ""
-    log_info "Results: $tests_passed passed, $tests_failed failed"
-    
-    [[ $tests_failed -eq 0 ]]
+    log_info "Results: $passed passed, $failed failed"
+    [[ $failed -eq 0 ]]
 }
 
 main "$@"
