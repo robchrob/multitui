@@ -1,134 +1,104 @@
-# MultiTUI — OpenCode Docker Environment
+# MultiTUI — OpenCode in Docker, any stack
 
-One image. Any stack. OpenCode runs inside a container with Docker access...
+<p align="center">
+  <a href="https://github.com/robchrob/multitui"><img src="https://img.shields.io/badge/Repo-GitHub-FFD700?style=for-the-badge" alt="Repository"></a>
+  <a href="https://github.com/robchrob/multitui/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
+</p>
 
-## Prerequisites
+One Docker image runs OpenCode with full Docker access — spawn containers for any language or framework without installing anything locally.
 
-- Docker running on host
-- `OPENROUTER_API_KEY` set in environment
-- Optional: `GITHUB_TOKEN`, `EXA_API_KEY` for MCP server features
+| Feature | What It Means |
+|---------|---------------|
+| **Single image, any stack** | Node, Python, Go, Rust — OpenCode runs them all via DooD |
+| **Background containers** | Start once, `mtui start` from multiple terminals |
+| **Skills & commands** | Reusable prompt templates loaded from agent/ |
+| **MCP built-in** | memory, context7, exa, github, deepwiki ready to go |
 
-## Quick Start
+---
 
-### One-Time Setup
+## Quick Install
+
 ```bash
-# Clone and setup globally
 git clone git@github.com:robchrob/multitui.git multitui
 cd multitui
 mtui setup
 ```
 
-### New Project
+Requires: Docker, `OPENROUTER_API_KEY` in environment.
+
+## Getting Started
+
+### New project
 ```bash
 mkdir my-app && cd my-app && git init
-mtui init "React 19 + Vite + Tailwind"
+mtui init "React + Vite"
 mtui start
 ```
 
-### Existing Project
+### Existing project
 ```bash
 cd my-project
-mtui bootstrap "monorepo with packages/"
+mtui bootstrap "analyze this codebase"
 mtui start
 ```
 
-### Resume Existing Project
+### Resume
 ```bash
 mtui start
 ```
 
-## How It Works
-```
-┌───────────────────────────────────────────────────────────────┐
-│ multitui container (OpenCode lives here)                     │
-│  OpenCode — reads/writes files directly                      │
-│  Docker CLI  — spawns project containers via DooD            │
-│  minimal alpine runtime                                       │
-│  Node.js is for OpenCode internals ONLY                     │
-│                                                             │
-│  To run project code:                                       │
-│    docker compose up                                        │
-│    docker compose run --rm app npm test                    │
-│    docker run --rm -v $PROJECT_ROOT:/app -w /app \          │
-│      node:22-alpine npm test                                │
-└──────────────────┬────────────────────────────────────────────┘
-                   │ host Docker socket (DooD)
-┌──────────────────▼────────────────────────────────────────────┐
-│ project container(s) (spawned by OpenCode)                    │
-│  Built from YOUR Dockerfile at project root                 │
-│  Have the actual runtimes (node, python, rust, etc.)        │
-│  Ports bind to host (localhost:3000, etc.)                  │
-│  Volume-mount: project files + named cache volumes          │
-└─────────────────────────────────────────────────────────────┘
-```
+---
 
-## mtui Commands
+## CLI Reference
 
 | Command | What |
 |---------|------|
-| `mtui setup` | Install/upgrade framework globally to ~/.multitui |
-| `mtui build [--no-cache]` | Build the multitui Docker image. Uses agent/docker/Dockerfile if present, falls back to ~/.multitui |
-| `mtui init [instruction]` | Scaffold new project, attach agent/, AI generates files |
-| `mtui bootstrap [instruction]` | Analyze existing codebase, configure MultiTUI |
-| `mtui start` | Start or resume |
-| `mtui start --tty` | Drop into bash shell instead of OpenCode |
-| `mtui start -p HOST:CONTAINER` | Expose extra port (repeatable) |
-| `mtui clean` / `mtui stop` | Remove container for this project |
-| `mtui list` | List all MultiTUI containers on machine |
-| `mtui status` | Show health of current project |
+| `mtui setup` | Install globally to ~/.multitui |
+| `mtui build [--no-cache]` | Build Docker image |
+| `mtui init [instruction]` | Scaffold new project |
+| `mtui bootstrap [instruction]` | Analyze existing project |
+| `mtui start [--tty] [-p H:C]` | Run OpenCode container |
+| `mtui clean` | Remove container |
+| `mtui ls` | List active containers |
+| `mtui status` | Show project health |
 
-## Session Management
-- **Ctrl+Z** inside OpenCode → detaches (container keeps running)
-- **`mtui start`** → resumes existing container
-- **`mtui clean`** → removes container (start fresh)
+---
 
-## Resetting
-
-To reset the global framework:
-```bash
-./reset.sh
-```
-This removes `~/.multitui` and re-runs `mtui setup`.
-
-## What Gets Generated
-`mtui init "stack"` and `mtui bootstrap` create:
-
-| File | Purpose | Overwrites? |
-|------|---------|-------------|
-| `AGENTS.md` | Stack, commands, conventions | Yes |
-| `Dockerfile` | Dev runtime for project | Only if missing |
-| `docker-compose.yml` | Services + volume caching | Only if missing |
-| `.opencode/skills/` | Skills from agent/ | Only if missing |
-| `.opencode/commands/` | Commands from agent/ | Only if missing |
-
-## Project Layout After Setup
-```
-my-project/
-├── AGENTS.md              # Stack + commands (generated)
-├── Dockerfile             # Dev runtime (generated)
-├── docker-compose.yml     # Services + caching (generated)
-├── .opencode/
-│   ├── skills/            # Scaffolded from agent/
-│   └── commands/          # Scaffolded from agent/
-├── agent/                 # MultiTUI agent (cloned, READ-ONLY)
-│   ├── mtui               # CLI binary
-│   ├── docker/Dockerfile
-│   ├── defaults/
-│   │   ├── skills/
-│   │   ├── commands/
-│   │   └── templates/
-│   ├── config/opencode.json
-│   └── README.md
-└── [source code]
-```
-
-## Config Hierarchy
+## Config
 
 | Location | Scope | Purpose |
 |----------|-------|---------|
 | `~/.config/opencode/opencode.json` | Global | User preferences |
-| `agent/config/opencode.json` | Per-project | Framework defaults (mounted into container) |
-| `AGENTS.md` | Per-project | Stack, commands, conventions |
+| `agent/defaults/opencode.json` | Per-project | Framework defaults |
+| `AGENTS.md` | Per-project | Stack, commands |
 
-`agent/config/opencode.json` is mounted into every container, providing:
-**memory**, **sequential-thinking**, **context7**, **exa**, **github**, and **deepwiki** MCP servers out of the box.
+---
+
+## Project Layout
+
+```
+my-project/
+├── AGENTS.md              # Stack + commands
+├── Dockerfile             # Dev runtime
+├── docker-compose.yml     # Services + caching
+├── agent/                 # MultiTUI (cloned, read-only)
+│   ├── defaults/          # Skills, commands, config
+│   └── prompts/           # init.md, bootstrap.md
+└── [your code]
+```
+
+---
+
+## Contributing
+
+```bash
+git clone git@github.com:robchrob/multitui.git
+cd multitui
+./tests/e2e/test/run.sh    # run test suite
+```
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
