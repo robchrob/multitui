@@ -38,8 +38,7 @@ tests/e2e/
 - `mtui status` — report container state, agent status, file presence
 - `mtui ls` — show all project containers
 
-## Development Workflow
-
+## DEV WORKFLOW
 ### Plan → Edit → Test Cycle
 ```bash
 # 0. Research with exa search, context7 and deepwiki anomalyco/opencode, read files
