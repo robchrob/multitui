@@ -1,4 +1,0 @@
-mtui custom - when we have changes in agent/ dir, we want to do develop-PROJECT_NAME.
-We want to do this as new entry in prompts/ and then spawn agent that will do all of it (go to agent/ check status, diff, write commit message, commit and push it to remote).
-
-FIXED: Multiple OpenCode instances now supported - background container with exec pattern allows multiple terminal sessions in same container. Ctrl+C/exit now properly detaches instead of killing container.
