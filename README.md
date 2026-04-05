@@ -1,5 +1,4 @@
 # MultiTUI — OpenCode in Docker, any stack
-
 <p align="center">
   <a href="https://github.com/robchrob/multitui"><img src="https://img.shields.io/badge/Repo-GitHub-FFD700?style=for-the-badge" alt="Repository"></a>
   <a href="https://github.com/robchrob/multitui/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
@@ -17,7 +16,6 @@ One Docker image runs OpenCode with full Docker access — spawn containers for 
 ---
 
 ## Quick Install
-
 ```bash
 git clone git@github.com:robchrob/multitui.git multitui
 cd multitui
@@ -27,7 +25,6 @@ mtui setup
 Requires: Docker, `OPENROUTER_API_KEY` in environment.
 
 ## Getting Started
-
 ### New project
 ```bash
 mkdir my-app && cd my-app && git init
@@ -50,7 +47,6 @@ mtui start
 ---
 
 ## CLI Reference
-
 | Command | What |
 |---------|------|
 | `mtui setup` | Install globally to ~/.multitui |
@@ -65,40 +61,13 @@ mtui start
 ---
 
 ## Config
-
 | Location | Scope | Purpose |
 |----------|-------|---------|
-| `~/.config/opencode/opencode.json` | Global | User preferences |
-| `agent/defaults/opencode.json` | Per-project | Framework defaults |
-| `AGENTS.md` | Per-project | Stack, commands |
-
----
-
-## Project Layout
-
-```
-my-project/
-├── AGENTS.md              # Stack + commands
-├── Dockerfile             # Dev runtime
-├── docker-compose.yml     # Services + caching
-├── agent/                 # MultiTUI (cloned, read-only)
-│   ├── defaults/          # Skills, commands, config
-│   └── prompts/           # init.md, bootstrap.md
-└── [your code]
-```
-
----
-
-## Contributing
-
-```bash
-git clone git@github.com:robchrob/multitui.git
-cd multitui
-./tests/e2e/test/run.sh    # run test suite
-```
+| `AGENTS.md` | Per-project | Environment description, stack, commands |
+| `defaults/opencode.json` | per-project | OpenCode configuration |
+| `docker/Dockerfile` | per-project | OpenCode environment |
 
 ---
 
 ## License
-
 MIT — see [LICENSE](LICENSE).
