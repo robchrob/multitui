@@ -3,172 +3,147 @@ description: Rewrite git commit messages — full branch or SHA1:SHA2 range
 argument-hint: <branch> or <sha1:sha2>
 ---
 
-Rewrite commit messages in git history using `git filter-branch` with position-based message mapping. Supports two modes auto-detected from the argument.
+Rewrite commit messages in git history using `git filter-branch` with SHA-based file mapping system.
 
 ## Mode Detection
-
 Parse `$1` to determine mode:
 
 - **Range mode**: Argument matches pattern `sha1:sha2` (two 40-char hex strings separated by colon)
   - Example: `rewrite-history a1b2c3d:ef45678`
-  - Rewrites commits in range `sha1..sha2` on current branch
+  - Used to extract diffs only for a specific range.
 - **Full branch mode**: Argument is a branch name
   - Example: `rewrite-history develop`
-  - Rewrites ALL commits reachable from that branch
 
 ## Execution Steps
-
-### Step 1: Backup Current Branch
+### Step 1: Detect Target & Backup
+Determine the target mode automatically and backup the current state.
 
 ```bash
-# Full branch mode
-BRANCH="$1"
-git branch "backup-$BRANCH" "$BRANCH"
+TARGET="$1"
 
-# Range mode — still backup the full branch since children get new hashes
+# Convert sha1:sha2 to git-native sha1..sha2 range if needed
+if [[ "$TARGET" == *":"* ]]; then
+  TARGET="${TARGET/:/..}"
+fi
+
+# Always backup the current branch
 BRANCH=$(git branch --show-current)
 git branch "backup-$BRANCH" "$BRANCH"
 ```
 
-### Step 2: Collect Commits (Oldest First)
-
-Determine the rev-list command based on mode:
-
-```bash
-# Range mode — commits reachable from SHA2 but not SHA1
-git log --oneline --format="%H" sha1..sha2 | tac
-
-# Full branch mode — all commits on branch
-git log --oneline --format="%H" <branch> | tac
-```
-
-Count the commits — you need this number to generate messages.
-
-### Step 3: Analyze Diffs (Optional)
-
-If you need to understand what each commit does to generate good messages:
+### Step 2: Extract Diffs (AI & Context Friendly)
+We place our analysis and mapping data in `/tmp/` to completely isolate it from `git filter-branch`'s aggressive `.git/` directory manipulations.
 
 ```bash
-# Range mode
-COMMITS=($(git log --format="%H" sha1..sha2 | tac))
+# Clean and recreate external directories
+rm -rf /tmp/rewrite_analysis /tmp/rewrite_messages
+mkdir -p /tmp/rewrite_analysis
+mkdir -p /tmp/rewrite_messages
 
-# Full branch mode
-COMMITS=($(git log --format="%H" <branch> | tac))
-
-# Analyze consecutive diffs
-for i in $(seq 0 $((${#COMMITS[@]} - 2))); do
-  echo "=== Diff ${COMMITS[$i]} -> ${COMMITS[$((i+1))]} ==="
-  git diff ${COMMITS[$i]} ${COMMITS[$((i+1))]}
+# Generate individual diff files for every commit in the target range (Oldest First)
+for sha in $(git rev-list --reverse "$TARGET"); do
+  git show --stat --patch "$sha" > "/tmp/rewrite_analysis/$sha.txt"
 done
+
+echo "Diffs extracted to /tmp/rewrite_analysis/. Review them to craft new messages."
 ```
 
-Save this analysis to a temp file for reference while crafting messages.
+### Step 3: Craft New Commit Messages
+For **every commit you want to rewrite**, create a text file inside `/tmp/rewrite_messages/`.
+- **Filename**: The *original* full commit SHA.
+- **File content**: The new commit message.
 
-### Step 4: Generate New Commit Messages
+*Note: You only need to create files for the commits you actually want to change. Missing files safely fall back to the original message.*
 
-For each commit, craft a message using conventional commit format:
+Read the isolated `/tmp/rewrite_analysis/<sha>.txt` files to understand what changed, then craft a detailed, robust message following this three-part structure:
 
 ```
-type: description
+type(optional-scope): subject
 
-- What changed and why
-- Additional details as needed
+detailed body paragraph(s)
+
+footer (optional)
 ```
 
-Types:
-- `feat`: new feature for the user
-- `fix`: bug fix for the user
-- `docs`: changes to documentation
-- `style`: formatting, no code change
-- `refactor`: refactoring production code
-- `test`: adding tests, no code change
-- `chore`: updating build tasks, config, etc
+#### Subject Line Rules
+- **Max 50 characters** — keep it brief and scannable
+- **Lowercase** — consistent style across all commits
+- **Imperative mood** — read as a command, not past tense
+  - Test: "If applied, this commit will [subject]" should make sense
+  - Use "add", "fix", "update" — NOT "added", "fixed", "updating"
+- **No trailing period** — never end the subject with punctuation
+- **Emphasize WHY, not HOW** — focus on the purpose, not the implementation
 
-Rules:
-- Subject line: 72 chars max, imperative mood, lowercase
-- Body: blank line after subject, then bullet points
-- Explain WHAT and WHY, not HOW
+#### Body (Description) — Detailed and Robust
+**Rules:**
+- Blank line between subject and body
+- **Wrap at 72 characters** per line
+- **Explain WHAT changed and WHY** — not HOW (the diff shows how)
+- **Provide context** — what was the situation before? What problem does this solve?
 
-### Step 5: Create the Message Filter Script
+**Good example:**
 
-Create a bash script that maps commits to messages by POSITION:
+```text
+feat(auth): add support for external key imports
+
+currently, users can only use keys created within the platform.
+this is a significant limitation for teams migrating from other
+services who already have established key infrastructure.
+
+adds the import_key() function and a new api endpoint that
+accepts externally-generated keys. validates key format and
+checks for conflicts before accepting.
+```
+
+### Step 4: Create the Filter Script
+Create a standalone executable script. This prevents `git filter-branch` from losing environment variables, losing its current working directory (CWD), or throwing subshell syntax errors.
 
 ```bash
+cat << 'EOF' > /tmp/msg_filter.sh
 #!/bin/bash
-# msg_filter.sh — position-based commit message replacement
-# Filter-branch processes commits NEWEST FIRST
-# But 'git rev-list | tac' iterates OLDEST FIRST
-# They meet in the middle, so INDEX matches correctly!
+# $GIT_COMMIT is provided by git and is always the ORIGINAL hash
+MSG_FILE="/tmp/rewrite_messages/$GIT_COMMIT"
 
-declare -a MSG_ARRAY
+if [ -f "$MSG_FILE" ]; then
+  cat "$MSG_FILE"
+else
+  # Fallback: read original commit message via standard input.
+  cat
+fi
+EOF
 
-# Messages in order OLDEST FIRST (oldest commit = index 0)
-# Include BOTH subject line AND body (blank line separates)
-MSG_ARRAY[0]="type: first commit message
-
-- Detailed description of what changed
-- Another detail about the change"
-MSG_ARRAY[1]="type: second commit message
-
-- Another change explanation"
-# ... add ALL messages in order (oldest to newest)
-
-COMMIT="$GIT_COMMIT"
-INDEX=0
-
-# Use the SAME rev-list command as Step 2
-for sha in $(git rev-list <branch_or_range> | tac); do
-    if [ "$sha" = "$COMMIT" ]; then
-        echo "${MSG_ARRAY[$INDEX]}"
-        exit 0
-    fi
-    INDEX=$((INDEX + 1))
-done
-
-# Fallback — pass through unchanged
-cat
+chmod +x /tmp/msg_filter.sh
 ```
 
-**Critical rules:**
-- Messages MUST be in array order OLDEST FIRST (index 0 = oldest commit)
-- Use position-based indexing — hash matching doesn't work reliably
-- The rev-list command MUST match the mode:
-  - Full branch: `git rev-list <branch> | tac`
-  - Range: `git rev-list sha1..sha2 | tac`
-
-### Step 6: Run filter-branch
+### Step 5: Run filter-branch
+Run the rewrite. Always pass the branch name (`$BRANCH`) to `filter-branch`, never the SHA range. Our script handles range limiting automatically: if a commit is outside your target range, it simply won't have a file in `/tmp/rewrite_messages/`, so the fallback cleanly passes the original message through.
 
 ```bash
-# Full branch mode
-FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter '/path/to/msg_filter.sh' -- <branch>
-
-# Range mode
-FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter '/path/to/msg_filter.sh' -- sha1..sha2
+# Squelch the deprecation warning and execute the external script
+FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter '/tmp/msg_filter.sh' -- "$BRANCH"
 ```
 
-### Step 7: Verify Result
+### Step 6: Verify Result & Cleanup
+```bash
+# Quick overview
+git log --oneline "$BRANCH"
+
+# Full messages to verify body content
+git log --format="%B" "$BRANCH"
+
+# Cleanup external temporary files
+rm -rf /tmp/rewrite_messages
+rm -rf /tmp/rewrite_analysis
+rm /tmp/msg_filter.sh
+```
+
+### Step 7: Rollback if Needed
+If something went wrong, immediately restore from your backup:
 
 ```bash
-git log --oneline <branch>
+git reset --hard "backup-$BRANCH"
 ```
-
-Check that all messages are correct and in the right order.
-
-### Step 8: Rollback if Needed
-
-```bash
-git reset --hard backup-<branch>
-```
-
-The original refs are also stored in `refs/original/` by filter-branch as a safety net.
 
 ## Important Notes
-
-- `git filter-branch` processes commits NEWEST FIRST by default
-- Using `git rev-list | tac` iterates OLDEST FIRST
-- They "meet in the middle" so INDEX counter correctly maps to MSG_ARRAY position
-- Range mode only rewrites commits in the specified range — parent commits before the range are untouched
-- Range mode still requires backing up the full branch because child commits after the range get new hashes
-- After range mode rewrite, the branch tip will have a new hash even if commits after the range were not modified
-- If something goes wrong, restore from backup immediately
-- For large numbers of commits, consider using `git filter-repo` instead (faster, safer)
+- **Unified Logic:** You no longer need separate logic for ranges vs. full branches. You always pass the `$BRANCH` to `filter-branch`. Commits that you don't map to files are passed through natively.
+- **Filter-Repo:** For very large repositories or histories (thousands of commits), consider using `git filter-repo` as it is generally faster and the modern standard over `filter-branch`.
