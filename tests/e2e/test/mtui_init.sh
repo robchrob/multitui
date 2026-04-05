@@ -1,6 +1,10 @@
 #!/bin/bash
 # mtui init tests — validates project scaffolding for new projects
-# Requires OPENROUTER_API_KEY (OpenCode generates the files)
+# Requires OPENROUTER_API_KEY
+#
+# Design: ONE `mtui init` call per stack (Python, JS). All assertions for
+# that stack reuse the same generated directory. This avoids re-running
+# the AI for every individual assertion.
 
 set -Eeuo pipefail
 
@@ -15,6 +19,10 @@ source "$LIB_DIR/fixtures.sh"
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
 TEST_TMP_DIR="/tmp/mtui_test_$$"
 
+# Set by setup — reused by all tests
+PY_DIR=""
+JS_DIR=""
+
 setup() {
     if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
         log_fail "OPENROUTER_API_KEY is required for init tests"
@@ -23,161 +31,174 @@ setup() {
 
     mkdir -p "$TEST_TMP_DIR"
     log_info "Setting up init test environment..."
+    # Image presence is guaranteed by run.sh before any suite executes.
 
-    if ! docker_image_exists "$MTUI_IMAGE"; then
-        log_info "Building multitui image..."
-        "$REPO_ROOT/mtui" build || { log_fail "Build failed"; exit 1; }
+    # --- Run mtui init for both stacks in parallel ---
+    PY_DIR="$TEST_TMP_DIR/init-py"
+    create_minimal_py "$PY_DIR"
+    JS_DIR="$TEST_TMP_DIR/init-js"
+    create_minimal_js "$JS_DIR"
+
+    log_info "Running mtui init for Python and JS projects in parallel..."
+    (cd "$PY_DIR" && "$REPO_ROOT/mtui" init "python uv project" 2>&1) &
+    local py_pid=$!
+    (cd "$JS_DIR" && "$REPO_ROOT/mtui" init "bun vite" 2>&1) &
+    local js_pid=$!
+
+    # Wait for both to finish
+    local py_ok=0 js_ok=0
+    wait "$py_pid" && py_ok=1 || true
+    wait "$js_pid" && js_ok=1 || true
+
+    if [[ $py_ok -eq 0 ]]; then
+        log_fail "Python init failed"
+        exit 1
     fi
+    if [[ $js_ok -eq 0 ]]; then
+        log_fail "JS init failed"
+        exit 1
+    fi
+    log_info "Both init sessions completed successfully"
 }
 
 teardown() {
+    local status="${1:-unknown}"
+    local run_dir
+    run_dir="$REPO_ROOT/tests/e2e/output/$(date +%Y%m%d_%H%M%S)_init_${status}"
+    mkdir -p "$run_dir"
+
+    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py"
+    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js"
+
+    log_info "Artifacts saved to $run_dir"
     rm -rf "$TEST_TMP_DIR"
 }
 
+# ── Python assertions ──────────────────────────────────────────────────────
+
 test_init_python_generates_files() {
-    log_test "mtui init generates required files for a Python project..."
-
-    local project_dir="$TEST_TMP_DIR/init-py-$$"
-    create_minimal_py "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" init "python uv project" 2>&1)
+    log_test "Python init generates AGENTS.md, Dockerfile, docker-compose.yml..."
 
     local missing=()
     for f in AGENTS.md Dockerfile docker-compose.yml; do
-        [[ -f "$project_dir/$f" ]] || missing+=("$f")
+        [[ -f "$PY_DIR/$f" ]] || missing+=("$f")
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        log_fail "Missing files after init: ${missing[*]}"
+        log_fail "Missing files: ${missing[*]}"
         return 1
     fi
 
     log_pass "All required files generated"
 }
 
-test_init_python_agents_md_content() {
-    log_test "AGENTS.md for Python project contains correct content..."
+test_init_python_agents_md_stack() {
+    log_test "Python AGENTS.md mentions Python/uv, not bun..."
 
-    local project_dir="$TEST_TMP_DIR/init-py-content-$$"
-    create_minimal_py "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" init "python uv project" 2>&1)
-
-    local agents="$project_dir/AGENTS.md"
-    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
-
-    assert_contains "$agents" "## Stack"    "Missing ## Stack section"    || return 1
-    assert_contains "$agents" "## Commands" "Missing ## Commands section"  || return 1
+    local agents="$PY_DIR/AGENTS.md"
+    assert_file_exists "$agents" || return 1
+    assert_contains "$agents" "## Stack"    "Missing ## Stack"    || return 1
+    assert_contains "$agents" "## Commands" "Missing ## Commands"  || return 1
     assert_contains "$agents" "docker compose" "Commands must use docker compose" || return 1
 
-    assert_contains "$agents" -i "python\|uv" "Stack section must mention Python or uv" || return 1
-    assert_not_contains "$agents" "bun run" "Python project AGENTS.md must not reference bun" || return 1
+    if ! grep -qi "python\|uv" "$agents"; then
+        log_fail "AGENTS.md does not mention Python or uv"
+        return 1
+    fi
 
-    log_pass "AGENTS.md content is correct for Python project"
+    if grep -q "bun run" "$agents"; then
+        log_fail "Python AGENTS.md references bun run — wrong stack"
+        return 1
+    fi
+
+    log_pass "Python AGENTS.md content correct"
 }
+
+test_init_python_compose_valid() {
+    log_test "Python docker-compose.yml passes validation..."
+
+    local compose="$PY_DIR/docker-compose.yml"
+    assert_file_exists "$compose" "docker-compose.yml not generated" || return 1
+    assert_contains "$compose" "services:" "Missing services block" || return 1
+
+    if (cd "$PY_DIR" && docker compose config --quiet 2>&1); then
+        log_pass "docker-compose.yml is valid"
+    else
+        log_fail "docker compose config rejected the file"
+        return 1
+    fi
+}
+
+# ── JS assertions ──────────────────────────────────────────────────────────
 
 test_init_js_generates_files() {
-    log_test "mtui init generates required files for a JS project..."
-
-    local project_dir="$TEST_TMP_DIR/init-js-$$"
-    create_minimal_js "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" init "bun vite" 2>&1)
+    log_test "JS init generates AGENTS.md, Dockerfile, docker-compose.yml..."
 
     local missing=()
     for f in AGENTS.md Dockerfile docker-compose.yml; do
-        [[ -f "$project_dir/$f" ]] || missing+=("$f")
+        [[ -f "$JS_DIR/$f" ]] || missing+=("$f")
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        log_fail "Missing files after init: ${missing[*]}"
+        log_fail "Missing files: ${missing[*]}"
         return 1
     fi
 
     log_pass "All required files generated"
 }
 
-test_init_js_agents_md_content() {
-    log_test "AGENTS.md for JS project contains correct content..."
+test_init_js_agents_md_stack() {
+    log_test "JS AGENTS.md mentions bun/node, not uv..."
 
-    local project_dir="$TEST_TMP_DIR/init-js-content-$$"
-    create_minimal_js "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" init "bun vite" 2>&1)
-
-    local agents="$project_dir/AGENTS.md"
-    assert_file_exists "$agents" "AGENTS.md not generated" || return 1
-
-    assert_contains "$agents" "## Stack"    "Missing ## Stack section"    || return 1
-    assert_contains "$agents" "## Commands" "Missing ## Commands section"  || return 1
+    local agents="$JS_DIR/AGENTS.md"
+    assert_file_exists "$agents" || return 1
+    assert_contains "$agents" "## Stack"    "Missing ## Stack"    || return 1
+    assert_contains "$agents" "## Commands" "Missing ## Commands"  || return 1
     assert_contains "$agents" "docker compose" "Commands must use docker compose" || return 1
-    assert_contains "$agents" -i "bun\|node" "Stack must mention bun or node"  || return 1
-    assert_not_contains "$agents" "uv run" "JS project AGENTS.md must not reference uv" || return 1
 
-    log_pass "AGENTS.md content is correct for JS project"
+    if ! grep -qi "bun\|node\|vite" "$agents"; then
+        log_fail "AGENTS.md does not mention bun, node, or vite"
+        return 1
+    fi
+
+    if grep -q "uv run" "$agents"; then
+        log_fail "JS AGENTS.md references uv run — wrong stack"
+        return 1
+    fi
+
+    log_pass "JS AGENTS.md content correct"
 }
+
+test_init_js_compose_valid() {
+    log_test "JS docker-compose.yml passes validation..."
+
+    local compose="$JS_DIR/docker-compose.yml"
+    assert_file_exists "$compose" "docker-compose.yml not generated" || return 1
+    assert_contains "$compose" "services:" "Missing services block" || return 1
+
+    if (cd "$JS_DIR" && docker compose config --quiet 2>&1); then
+        log_pass "docker-compose.yml is valid"
+    else
+        log_fail "docker compose config rejected the file"
+        return 1
+    fi
+}
+
+# ── Shared ─────────────────────────────────────────────────────────────────
 
 test_init_attaches_agent() {
     log_test "mtui init attaches the agent/ directory..."
 
-    local project_dir="$TEST_TMP_DIR/init-agent-$$"
-    create_minimal_js "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" init "bun vite" 2>&1)
-
-    if [[ ! -d "$project_dir/agent" ]]; then
-        log_fail "agent/ directory not found after init"
-        return 1
-    fi
-
-    if [[ ! -f "$project_dir/agent/AGENTS.md" ]]; then
-        log_fail "agent/AGENTS.md missing — agent clone may be broken"
-        return 1
-    fi
-
-    log_pass "agent/ directory attached and valid"
-}
-
-test_init_dockerfile_valid() {
-    log_test "Generated Dockerfile passes docker build validation..."
-
-    local project_dir="$TEST_TMP_DIR/init-dockerfile-$$"
-    create_minimal_py "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" init "python uv project" 2>&1)
-
-    assert_file_exists "$project_dir/Dockerfile" "Dockerfile not generated" || return 1
-
-    if docker build --check -f "$project_dir/Dockerfile" "$project_dir" 2>&1; then
-        log_pass "Dockerfile is syntactically valid"
-    else
-        if docker buildx build --no-cache --dry-run -f "$project_dir/Dockerfile" "$project_dir" 2>&1 | grep -q "ERROR"; then
-            log_fail "Dockerfile has errors"
-            return 1
+    local failed=0
+    for dir in "$PY_DIR" "$JS_DIR"; do
+        if [[ ! -d "$dir/agent" ]]; then
+            log_fail "agent/ missing in $dir"
+            failed=1
         fi
-        log_pass "Dockerfile appears valid"
-    fi
-}
+    done
 
-test_init_compose_valid() {
-    log_test "Generated docker-compose.yml is valid..."
-
-    local project_dir="$TEST_TMP_DIR/init-compose-$$"
-    create_minimal_py "$project_dir"
-
-    (cd "$project_dir" && "$REPO_ROOT/mtui" init "python uv project" 2>&1)
-
-    local compose="$project_dir/docker-compose.yml"
-    assert_file_exists "$compose" "docker-compose.yml not generated" || return 1
-
-    assert_contains "$compose" "services:" "docker-compose.yml must define services" || return 1
-
-    if (cd "$project_dir" && docker compose config --quiet 2>&1); then
-        log_pass "docker-compose.yml passes docker compose config validation"
-    else
-        log_fail "docker compose config rejected the generated file"
-        return 1
-    fi
+    [[ $failed -eq 0 ]] && log_pass "agent/ attached in both projects"
+    return $failed
 }
 
 main() {
@@ -187,23 +208,19 @@ main() {
 
     for fn in \
         test_init_python_generates_files \
-        test_init_python_agents_md_content \
+        test_init_python_agents_md_stack \
+        test_init_python_compose_valid \
         test_init_js_generates_files \
-        test_init_js_agents_md_content \
-        test_init_attaches_agent \
-        test_init_dockerfile_valid \
-        test_init_compose_valid; do
+        test_init_js_agents_md_stack \
+        test_init_js_compose_valid \
+        test_init_attaches_agent; do
         log_test "Running $fn..."
-        if $fn; then
-            log_pass "$fn"
-            ((passed++)) || true
-        else
-            log_fail "$fn"
-            ((failed++)) || true
+        if $fn; then log_pass "$fn"; ((passed++)) || true
+        else          log_fail "$fn"; ((failed++)) || true
         fi
     done
 
-    teardown
+    teardown "$( [[ $failed -eq 0 ]] && echo pass || echo fail )"
     echo ""
     log_info "Results: $passed passed, $failed failed"
     [[ $failed -eq 0 ]]

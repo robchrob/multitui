@@ -51,7 +51,7 @@ test_start_creates_named_container() {
     # We export a dummy key so the env check passes; OpenCode won't be exec'd in
     # this path because we immediately check container state and clean up.
     OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-dummy}" \
-        (cd "$project_dir" && timeout 15 "$REPO_ROOT/mtui" start 2>&1) &
+        bash -c "cd '$project_dir' && timeout 15 '$REPO_ROOT/mtui' start" 2>&1 &
     local bg_pid=$!
 
     # Wait up to 10s for the container to appear
