@@ -1,200 +1,199 @@
 #!/bin/bash
-# mtui container tests - validates container lifecycle
-# These tests don't require OPENROUTER_API_KEY - they test CLI and Docker directly
+# mtui container lifecycle tests — start, status, clean
+# Does NOT require OPENROUTER_API_KEY (uses --tty / sleep infinity path)
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
 
 source "$LIB_DIR/test_helpers.sh"
 source "$LIB_DIR/docker.sh"
-source "$LIB_DIR/mtui.sh"
 source "$LIB_DIR/fixtures.sh"
 
-TEST_TMP_DIR="/tmp/mtui_test_$$"
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
-TEST_PROJECT_NAME="mtui-test-container"
+TEST_TMP_DIR="/tmp/mtui_test_$$"
+
+_expected_container_name() {
+    local dir="$1"
+    echo "mtui-$(basename "$dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+}
 
 setup() {
     mkdir -p "$TEST_TMP_DIR"
-    log_info "Setting up container test environment..."
-    
+    log_info "Setting up container lifecycle test environment..."
+
     if ! docker_image_exists "$MTUI_IMAGE"; then
-        log_info "Building multitui image..."
-        local dockerfile="$SCRIPT_DIR/../../../docker/Dockerfile"
-        docker build -f "$dockerfile" -t "$MTUI_IMAGE" "$(dirname "$dockerfile")" || {
-            log_fail "Failed to build image"
-            exit 1
-        }
+        log_info "Building multitui image first..."
+        "$REPO_ROOT/mtui" build || { log_fail "Image build failed"; exit 1; }
     fi
 }
 
 teardown() {
-    log_info "Cleaning up container test environment..."
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    docker rm -f mtui-oc-port 2>/dev/null || true
-    rm -rf "$TEST_TMP_DIR" 2>/dev/null || true
+    docker ps -aq --filter "name=^/mtui-mtui-fixture" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+    rm -rf "$TEST_TMP_DIR"
 }
 
-test_container_dockerfile_exists() {
-    log_test "Testing Dockerfile exists in project..."
-    
-    local dockerfile="$SCRIPT_DIR/../../../docker/Dockerfile"
-    if [[ -f "$dockerfile" ]]; then
-        log_pass "Dockerfile found at $dockerfile"
-    else
-        log_fail "Dockerfile not found"
-        return 1
-    fi
-    return 0
-}
+test_start_creates_named_container() {
+    log_test "mtui start creates a correctly-named background container..."
 
-test_container_image() {
-    log_test "Testing multitui image exists..."
-    
-    if docker_image_exists "$MTUI_IMAGE"; then
-        log_pass "Image $MTUI_IMAGE exists"
-    else
-        log_fail "Image $MTUI_IMAGE not found"
-        return 1
-    fi
-    return 0
-}
+    local project_dir="$TEST_TMP_DIR/mtui-fixture-start"
+    create_minimal_py "$project_dir"
 
-test_container_run() {
-    log_test "Testing container can be created and run..."
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    
-    if docker run -d --name mtui-test-container "$MTUI_IMAGE" sleep 30; then
-        sleep 2
-        if docker_container_running "mtui-test-container"; then
-            log_pass "Container started successfully"
-        else
-            log_fail "Container not running"
-            return 1
+    local expected_cn
+    expected_cn="$(_expected_container_name "$project_dir")"
+
+    docker rm -f "$expected_cn" 2>/dev/null || true
+
+    OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-dummy}" \
+        (cd "$project_dir" && timeout 15 "$REPO_ROOT/mtui" start 2>&1) &
+    local bg_pid=$!
+
+    local elapsed=0
+    while [[ $elapsed -lt 10 ]]; do
+        if docker_container_exists "$expected_cn"; then
+            break
         fi
+        sleep 1
+        ((elapsed++)) || true
+    done
+
+    kill "$bg_pid" 2>/dev/null || true
+    wait "$bg_pid" 2>/dev/null || true
+
+    if docker_container_exists "$expected_cn"; then
+        log_pass "Container $expected_cn created by mtui start"
+        docker rm -f "$expected_cn" 2>/dev/null || true
     else
-        log_fail "Failed to start container"
+        log_fail "Container $expected_cn was not created within 10s"
         return 1
     fi
-    return 0
 }
 
-test_container_stop() {
-    log_test "Testing container can be stopped..."
-    
-    docker run -d --name mtui-test-container "$MTUI_IMAGE" sleep 30 2>/dev/null || true
-    sleep 1
-    
-    if docker rm -f mtui-test-container 2>/dev/null; then
-        log_pass "Container removed successfully"
-    else
-        log_fail "Failed to remove container"
-        return 1
-    fi
-    return 0
-}
+test_status_no_container() {
+    log_test "mtui status reports 'Not Created' when no container exists..."
 
-test_container_exec() {
-    log_test "Testing docker exec works in container..."
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    docker run -d --name mtui-test-container "$MTUI_IMAGE" sleep 30 2>/dev/null || true
-    sleep 2
-    
+    local project_dir="$TEST_TMP_DIR/mtui-fixture-status"
+    create_minimal_py "$project_dir"
+
+    local expected_cn
+    expected_cn="$(_expected_container_name "$project_dir")"
+    docker rm -f "$expected_cn" 2>/dev/null || true
+
     local output
-    output=$(docker exec mtui-test-container echo "hello" 2>&1)
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    
-    if [[ "$output" == "hello" ]]; then
-        log_pass "Docker exec works"
+    output=$(cd "$project_dir" && "$REPO_ROOT/mtui" status 2>&1)
+
+    if echo "$output" | grep -qi "not created"; then
+        log_pass "Status correctly reports 'Not Created'"
     else
-        log_fail "Docker exec failed: $output"
+        log_fail "Expected 'Not Created' in status output, got:\n$output"
         return 1
     fi
-    return 0
 }
 
-test_container_docker_cli() {
-    log_test "Testing Docker CLI available in container..."
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    docker run -d --name mtui-test-container "$MTUI_IMAGE" sleep 30 2>/dev/null || true
-    sleep 2
-    
-    local docker_exists
-    docker_exists=$(docker exec mtui-test-container which docker 2>/dev/null || echo "")
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    
-    if [[ -n "$docker_exists" ]]; then
-        log_pass "Docker CLI available in container"
+test_status_running_after_start() {
+    log_test "mtui status reports Running after container is started..."
+
+    local project_dir="$TEST_TMP_DIR/mtui-fixture-status-run"
+    create_minimal_py "$project_dir"
+
+    local expected_cn
+    expected_cn="$(_expected_container_name "$project_dir")"
+    docker rm -f "$expected_cn" 2>/dev/null || true
+
+    docker run -d --name "$expected_cn" \
+        -v "$project_dir:$project_dir" \
+        -w "$project_dir" \
+        "$MTUI_IMAGE" sleep infinity >/dev/null
+
+    local output
+    output=$(cd "$project_dir" && "$REPO_ROOT/mtui" status 2>&1)
+
+    docker rm -f "$expected_cn" 2>/dev/null || true
+
+    if echo "$output" | grep -qi "running"; then
+        log_pass "Status correctly reports Running"
     else
-        log_fail "Docker CLI not available"
+        log_fail "Expected 'Running' in status output, got:\n$output"
         return 1
     fi
-    return 0
 }
 
-test_container_git() {
-    log_test "Testing Git available in container..."
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    docker run -d --name mtui-test-container "$MTUI_IMAGE" sleep 30 2>/dev/null || true
-    sleep 2
-    
-    local git_version
-    git_version=$(docker exec mtui-test-container git --version 2>/dev/null || echo "")
-    
-    docker rm -f mtui-test-container 2>/dev/null || true
-    
-    if [[ -n "$git_version" ]]; then
-        log_pass "Git available: $git_version"
-    else
-        log_fail "Git not available"
+test_clean_removes_container() {
+    log_test "mtui clean removes the project container..."
+
+    local project_dir="$TEST_TMP_DIR/mtui-fixture-clean"
+    create_minimal_py "$project_dir"
+
+    local expected_cn
+    expected_cn="$(_expected_container_name "$project_dir")"
+
+    docker run -d --name "$expected_cn" "$MTUI_IMAGE" sleep infinity >/dev/null
+
+    (cd "$project_dir" && "$REPO_ROOT/mtui" clean 2>&1)
+
+    if docker_container_exists "$expected_cn"; then
+        log_fail "Container $expected_cn still exists after mtui clean"
+        docker rm -f "$expected_cn" 2>/dev/null || true
         return 1
     fi
-    return 0
+
+    log_pass "Container removed by mtui clean"
+}
+
+test_list_shows_running_container() {
+    log_test "mtui list shows a running project container..."
+
+    local project_dir="$TEST_TMP_DIR/mtui-fixture-list"
+    create_minimal_py "$project_dir"
+
+    local expected_cn
+    expected_cn="$(_expected_container_name "$project_dir")"
+
+    docker run -d --name "$expected_cn" "$MTUI_IMAGE" sleep infinity >/dev/null
+
+    local output
+    output=$(cd "$project_dir" && "$REPO_ROOT/mtui" list 2>&1)
+
+    docker rm -f "$expected_cn" 2>/dev/null || true
+
+    local short_name
+    short_name="${expected_cn#mtui-}"
+
+    if echo "$output" | grep -q "$short_name"; then
+        log_pass "mtui list shows $short_name"
+    else
+        log_fail "Expected $short_name in mtui list output, got:\n$output"
+        return 1
+    fi
 }
 
 main() {
-    set +e
-    local tests_passed=0
-    local tests_failed=0
-    
     setup
-    
-    local test_funcs=(
-        "test_container_dockerfile_exists"
-        "test_container_image"
-        "test_container_run"
-        "test_container_stop"
-        "test_container_exec"
-        "test_container_docker_cli"
-        "test_container_git"
-    )
-    
-    for test_func in "${test_funcs[@]}"; do
-        echo "Running $test_func..."
-        if $test_func; then
-            echo "$test_func PASSED"
-            ((tests_passed++)) || true
+    set +e
+    local passed=0 failed=0
+
+    for fn in \
+        test_start_creates_named_container \
+        test_status_no_container \
+        test_status_running_after_start \
+        test_clean_removes_container \
+        test_list_shows_running_container; do
+        log_test "Running $fn..."
+        if $fn; then
+            log_pass "$fn"
+            ((passed++)) || true
         else
-            echo "$test_func FAILED"
-            ((tests_failed++)) || true
+            log_fail "$fn"
+            ((failed++)) || true
         fi
     done
-    
+
     teardown
-    
     echo ""
-    log_info "Results: $tests_passed passed, $tests_failed failed"
-    
-    [[ $tests_failed -eq 0 ]]
+    log_info "Results: $passed passed, $failed failed"
+    [[ $failed -eq 0 ]]
 }
 
 main "$@"
