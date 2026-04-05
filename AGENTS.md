@@ -1,6 +1,8 @@
 # MultiTUI — Execution Environment
 > DEVMODE=local development execution of framework (no inside other project in agent/)
-> Submodule at `$PROJECT_ROOT/agent/`. Project rules → `AGENTS.md`.
+    THEN: STOP and read AGENTS_DEV.md as you are in development mode!
+> IF framework cloned at `$PROJECT_ROOT/agent/`.
+    THEN: continue
 
 ## Execution Layers
 ```
