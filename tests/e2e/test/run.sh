@@ -13,6 +13,8 @@ source "$LIB_DIR/docker.sh"
 VERBOSE="${MTUI_TEST_VERBOSE:-0}"
 TEST_FILTER="${MTUI_TEST_FILTER:-}"
 
+MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
+
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
@@ -31,11 +33,24 @@ check_prerequisites() {
         return 1
     fi
 
-    if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-        log_skip "OPENROUTER_API_KEY not set — init and bootstrap tests will be skipped"
+    log_pass "Prerequisites OK"
+}
+
+# Build the multitui image once before any suite runs.
+# If the image already exists, mtui build is a no-op (it detects the version
+# and skips unless an update is available). Individual suites never trigger
+# builds — they rely on this single gate.
+ensure_image() {
+    if docker images -q "$MTUI_IMAGE" 2>/dev/null | grep -q .; then
+        log_info "Image $MTUI_IMAGE already exists — skipping build"
+        return 0
     fi
 
-    log_pass "Prerequisites OK"
+    log_info "Image $MTUI_IMAGE not found — building now (one-time)..."
+    "$REPO_ROOT/mtui" build || {
+        log_fail "mtui build failed — cannot run tests without the image"
+        return 1
+    }
 }
 
 # Tests that need no API key — run always
@@ -159,6 +174,7 @@ main() {
     done
 
     check_prerequisites || exit 1
+    ensure_image       || exit 1
     run_all_tests
 }
 

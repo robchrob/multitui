@@ -14,14 +14,13 @@ source "$LIB_DIR/docker.sh"
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
 
 setup() {
-    if ! docker_image_exists "$MTUI_IMAGE"; then
-        log_info "Building multitui image..."
-        "$REPO_ROOT/mtui" build || { log_fail "Build failed"; exit 1; }
-    fi
+    # Image presence is guaranteed by run.sh before any suite executes.
+    :
 }
 
 teardown() { :; }
 
+# Real test: opencode binary is present and returns a version string
 test_opencode_version() {
     log_test "opencode --version returns a non-empty version..."
 
@@ -39,6 +38,7 @@ test_opencode_version() {
     log_pass "opencode version: $version"
 }
 
+# Real test: opencode can be invoked with `run` and a prompt (non-interactive, no key needed for --help)
 test_opencode_help() {
     log_test "opencode --help exits cleanly..."
 
@@ -50,6 +50,8 @@ test_opencode_help() {
     log_pass "opencode --help output is sane"
 }
 
+# Real test: OPENCODE_CONFIG env var is respected — config dir must be mountable
+# This validates that the container is set up to receive the agent config correctly.
 test_opencode_config_env_passthrough() {
     log_test "OPENCODE_CONFIG_DIR env var is passed through to container..."
 
@@ -67,6 +69,8 @@ test_opencode_config_env_passthrough() {
     fi
 }
 
+# Real test: When mtui start runs OpenCode it uses the model flag from config.
+# We verify the model env var is set in the container that mtui start would create.
 test_opencode_model_env_set() {
     log_test "OPENCODE_DEFAULT_MODEL env var is set in container..."
 
