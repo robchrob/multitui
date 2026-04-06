@@ -29,7 +29,7 @@ tests/e2e/
 ```
 
 ## mtui CLI Commands
-- `mtui setup` — clone framework to `~/.multitui`, symlink binary, build image
+- `mtui setup` — download/update mtui binary, build image (no ~/.multitui clone)
 - `mtui build [--no-cache]` — build Docker image (checks OpenCode updates, auto-rebuilds if needed)
 - `mtui init "<desc>"` — attach agent/, scaffold new project with prompt/init.md
 - `mtui bootstrap "<desc>"` — attach agent/, analyze existing project with prompt/bootstrap.md
@@ -37,6 +37,9 @@ tests/e2e/
 - `mtui clean` — remove project container
 - `mtui status` — report container state, agent status, file presence
 - `mtui ls` — show all project containers
+- `mtui branch create` — create/track a project-specific branch (develop-<projectname>)
+- `mtui branch status` — show branch info, commits ahead/behind develop
+- `mtui update [--continue]` — rebase project branch onto latest develop
 
 ## DEV WORKFLOW
 ### Plan → Edit → Test Cycle
@@ -46,17 +49,18 @@ tests/e2e/
 # 2. Run and ADD relevant tests (for new feature / changes)
 ./tests/e2e/test/run.sh -f build      # after Dockerfile changes
 ./tests/e2e/test/run.sh -f container  # after container lifecycle changes
-./tests/e2e/test/run.sh -f setup      # after install changes
-./tests/e2e/test/run.sh -f init       # after init prompt changes
-./tests/e2e/test/run.sh -f bootstrap  # after bootstrap prompt changes
-./tests/e2e/test/run.sh -f opencode   # after image/tooling changes
+./tests/e2e/test/run.sh -f setup       # after install changes
+./tests/e2e/test/run.sh -f branch      # after branch feature changes
+./tests/e2e/test/run.sh -f init        # after init prompt changes
+./tests/e2e/test/run.sh -f bootstrap   # after bootstrap prompt changes
+./tests/e2e/test/run.sh -f opencode    # after image/tooling changes
 # 3. Test runs based on Testing Hierarchy
 ```
 
 ### Testing Hierarchy
 ```bash
 # Single test function — only works for suites that create their own fixtures inline
-# (mtui_container, mtui_build, mtui_opencode, mtui_setup)
+# (mtui_container, mtui_build, mtui_opencode, mtui_setup, mtui_branch)
 # DO NOT use this pattern for mtui_init or mtui_bootstrap — they require setup() to run first
 bash -c 'source tests/e2e/test/mtui_container.sh && test_status_no_container'
 

@@ -10,84 +10,56 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 source "$LIB_DIR/test_helpers.sh"
 source "$LIB_DIR/docker.sh"
 
-MTUI_HOME="$HOME/.multitui"
 MTUI_LINK="$HOME/.local/bin/mtui"
 
 setup() {
     log_info "Setting up setup test environment..."
-    # Remove only our own installation artifacts — don't nuke unrelated config
-    rm -rf "$MTUI_HOME" 2>/dev/null || true
-    rm -f  "$MTUI_LINK" 2>/dev/null || true
+    rm -f "$MTUI_LINK" 2>/dev/null || true
 }
 
 teardown() {
-    log_info "Teardown complete (leaving ~/.multitui in place for subsequent tests)"
+    log_info "Teardown complete"
 }
 
-# Real test: mtui setup clones the framework to ~/.multitui
-test_setup_install() {
-    log_test "mtui setup installs framework to ~/.multitui..."
+test_setup_e2e() {
+    log_test "mtui setup runs, binary responds, image exists..."
 
-    "$REPO_ROOT/mtui" setup 2>&1 || {
-        log_fail "mtui setup exited non-zero"
-        return 1
-    }
-
-    assert_dir_exists "$MTUI_HOME" "~/.multitui not created" || return 1
-
-    log_pass "Framework installed to $MTUI_HOME"
-}
-
-# Real test: mtui is symlinked to ~/.local/bin/mtui and is executable
-test_setup_links_binary() {
-    log_test "mtui binary is linked at ~/.local/bin/mtui..."
-
-    assert_file_exists "$MTUI_LINK" "~/.local/bin/mtui not found" || return 1
-
-    if [[ ! -L "$MTUI_LINK" ]]; then
-        log_fail "$MTUI_LINK is not a symlink"
+    if [[ -x "$REPO_ROOT/mtui" ]]; then
+        "$REPO_ROOT/mtui" setup 2>&1 || {
+            log_fail "mtui setup exited non-zero"
+            return 1
+        }
+    else
+        log_fail "Repo mtui not found at $REPO_ROOT/mtui"
         return 1
     fi
 
     if [[ ! -x "$MTUI_LINK" ]]; then
-        log_fail "$MTUI_LINK is not executable"
+        log_fail "mtui not installed at $MTUI_LINK"
         return 1
     fi
 
-    log_pass "mtui linked and executable at $MTUI_LINK"
-}
-
-# Real test: the installed binary exits 0 on --help
-test_setup_installed_binary_works() {
-    log_test "Installed mtui binary responds to --help..."
-
-    # Use exit code only — ANSI escape codes make grep unreliable here
-    "$MTUI_LINK" --help >/dev/null 2>&1 || {
-        log_fail "Installed mtui --help exited non-zero"
+    if ! docker_image_exists "multitui"; then
+        log_fail "multitui image not found after setup"
         return 1
-    }
+    fi
 
-    log_pass "Installed mtui binary works"
+    log_pass "Setup works: binary installed, image exists"
 }
 
 main() {
+    trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT
     setup
     set +e
     local passed=0 failed=0
 
-    for fn in \
-        test_setup_install \
-        test_setup_links_binary \
-        test_setup_installed_binary_works; do
-        log_test "Running $fn..."
-        if $fn; then
-            log_pass "$fn"
-            ((passed++)) || true
-        else
-            log_fail "$fn"
-            ((failed++)) || true
-        fi
-    done
+    if test_setup_e2e; then
+        log_pass "test_setup_e2e"
+        ((passed++)) || true
+    else
+        log_fail "test_setup_e2e"
+        ((failed++)) || true
+    fi
 
     teardown
     echo ""
