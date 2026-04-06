@@ -1,6 +1,5 @@
 #!/bin/bash
 # MultiTUI — Global CLI Orchestrator
-
 # --- CRITICAL: Bash Version Check (namerefs require 4.3+) ---
 if [[ "${BASH_VERSINFO[0]}" -lt 4 ]] || [[ "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -lt 3 ]]; then
     echo -e "\033[0;31m[✘] Error: This script requires Bash 4.3 or higher for nameref support.\033[0m" >&2
@@ -14,8 +13,8 @@ shopt -s nullglob
 
 MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
-REMOTE_BRANCH="develop"
-OPENCODE_DEFAULT_MODEL="stepfun/step-3.5-flash:free"
+REMOTE_BRANCH="${MTUI_BRANCH:-develop}"
+OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-stepfun/step-3.5-flash:free}"
 #OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
 
 # --- Colors & Helpers ---
@@ -100,7 +99,7 @@ _attach() {
         _log "Agent missing or broken, re-cloning branch: $branch..."
         rm -rf agent .git/modules/agent
         git config --remove-section submodule.agent >/dev/null 2>&1 || true
-        
+
         # Try to clone the specified branch, fall back to default branch if it doesn't exist
         if ! git clone --depth 1 -b "$branch" "$REMOTE_REPO" agent 2>/dev/null; then
             git clone --depth 1 "$REMOTE_REPO" agent
@@ -172,7 +171,6 @@ _build_docker_flags() {
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
         -e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
         -e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
-        -e GITHUB_TOKEN
         -e EXA_API_KEY
         -e PROJECT_ROOT="$PWD"
     )
@@ -197,7 +195,6 @@ _run_opencode() {
 }
 
 # --- Core Commands ---
-
 cmd_setup() {
     _log "Installing mtui to ~/.local/bin..."
 
@@ -419,7 +416,7 @@ cmd_status() {
     if [[ -d "agent" ]]; then
         local agent_branch
         agent_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
-        
+
         if [[ -f ".mtui-branch" ]]; then
             echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch, project branch)"
         else
@@ -474,7 +471,7 @@ cmd_branch_create() {
 
     # Now create/tracking the project branch
     git -C agent fetch origin -q 2>/dev/null || true
-    
+
     # Check if branch already exists remotely
     if git -C agent rev-parse "origin/$branch_name" >/dev/null 2>&1; then
         _log "Branch $branch_name exists remotely, tracking it..."
@@ -507,19 +504,19 @@ cmd_branch_status() {
     if [[ -d "agent" ]]; then
         local current_branch ahead behind
         current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
-        
+
         git -C agent fetch origin -q 2>/dev/null || true
-        
+
         local base_branch="$REMOTE_BRANCH"
         if [[ -f ".mtui-branch" ]]; then
             base_branch="$(cat .mtui-branch)"
         fi
-        
+
         if [[ "$current_branch" != "$REMOTE_BRANCH" ]]; then
             local revs_ahead behind
             ahead="$(git -C agent rev-list --count "origin/$REMOTE_BRANCH".."$current_branch" 2>/dev/null || echo '?')"
             behind="$(git -C agent rev-list --count "$current_branch"..origin/"$REMOTE_BRANCH" 2>/dev/null || echo '?')"
-            
+
             echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch"
             echo -e "${C_BOLD}Base branch:${C_RESET}    $REMOTE_BRANCH"
             echo -e "${C_BOLD}Ahead of develop:${C_RESET} $ahead commits"
@@ -528,7 +525,7 @@ cmd_branch_status() {
             echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch (tracking $REMOTE_BRANCH)"
             echo -e "${C_BOLD}Status:${C_RESET} Up to date with develop"
         fi
-        
+
         local last_fetch
         last_fetch="$(git -C agent log -1 --format='%ci' origin/$REMOTE_BRANCH 2>/dev/null | cut -d' ' -f1,2 | cut -d'T' -f1 || echo 'unknown')"
         echo -e "${C_BOLD}Last updated:${C_RESET} $last_fetch"
