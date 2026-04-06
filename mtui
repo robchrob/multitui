@@ -15,8 +15,8 @@ MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
 REMOTE_BRANCH="${MTUI_BRANCH:-develop}"
 OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-openrouter/stepfun/step-3.5-flash:free}"
-#OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
-#OPENCODE_DEFAULT_MODEL="qwen/qwen3.6-plus:free"
+#OPENCODE_DEFAULT_MODEL="openrouter/opencode/minimax-m2.5-free"
+#OPENCODE_DEFAULT_MODEL="openrouter/qwen/qwen3.6-plus:free"
 
 # --- Colors & Helpers ---
 C_RESET='\033[0m'
@@ -172,6 +172,10 @@ _build_docker_flags() {
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
         -e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
         -e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
+        -e OPENCODE_DATA_DIR="/workspace/.opencode-data"
+        -e OPENCODE_CACHE_DIR="/workspace/.opencode-cache"
+        -e OPENCODE_STATE_DIR="/workspace/.opencode-state"
+        -e OPENCODE_LOG_DIR="/workspace/.opencode-log"
         -e EXA_API_KEY
         -e PROJECT_ROOT="$PWD"
     )

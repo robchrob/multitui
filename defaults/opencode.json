@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/stepfun/step-3.5-flash:free",
+  "model": "{env:MTUI_MODEL}",
   "permission": {
     "bash": {
       "*": "allow",
