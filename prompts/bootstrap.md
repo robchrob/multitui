@@ -1,6 +1,7 @@
 ${USER_INSTRUCTION:+USER INSTRUCTION: ${USER_INSTRUCTION}
 }
 Analyze this existing project called "${PROJECT_NAME}" and generate MultiTUI config for it.
+Year is 2026.
 
 ## MCP Tools to Use
 - **context7**: Get version-specific docs for detected frameworks (run resolve-library-id first, then query-docs)
