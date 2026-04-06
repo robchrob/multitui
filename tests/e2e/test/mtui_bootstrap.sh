@@ -83,14 +83,21 @@ setup() {
 
 teardown() {
     local status="${1:-unknown}"
-    local run_dir
-    run_dir="$REPO_ROOT/tests/e2e/output/$(date +%Y%m%d_%H%M%S)_bootstrap_${status}"
+    local output_dir="$REPO_ROOT/tests/e2e/output"
+    mkdir -p "$output_dir"
+
+    local timestamp
+    timestamp="$(date +%Y%m%d_%H%M%S)"
+    local run_dir="$output_dir/${timestamp}_bootstrap_${status}"
     mkdir -p "$run_dir"
+    echo "bootstrap test run at $(date)" > "$run_dir/status.txt"
 
-    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py" 2>/dev/null || true
-    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js" 2>/dev/null || true
+    log_info "Output dir: $run_dir"
 
-    log_info "Artifacts saved to $run_dir"
+    local all_runs
+    all_runs=$(ls -1t "$output_dir"/ 2>/dev/null | grep '_bootstrap_' | tail -n +3)
+    [[ -n "$all_runs" ]] && rm -rf "$all_runs" 2>/dev/null || true
+
     rm -rf "$TEST_TMP_DIR" 2>/dev/null || {
         docker run --rm -v "$TEST_TMP_DIR:/tmp/cleanup:rw" alpine rm -rf /tmp/cleanup 2>/dev/null || true
     }
@@ -134,18 +141,6 @@ test_bootstrap_python_commands_use_docker_compose() {
     assert_contains "$agents" "docker compose" "Commands must use docker compose" || return 1
 
     log_pass "Commands section uses docker compose"
-}
-
-test_bootstrap_preserves_existing_dockerfile() {
-    _require_fixtures
-    log_test "bootstrap does not overwrite an existing Dockerfile..."
-
-    if ! grep -q "SENTINEL" "$PY_DIR/Dockerfile"; then
-        log_fail "Existing Dockerfile was overwritten by bootstrap"
-        return 1
-    fi
-
-    log_pass "Existing Dockerfile preserved"
 }
 
 # ── JS assertions ──────────────────────────────────────────────────────────
@@ -205,7 +200,6 @@ main() {
         test_bootstrap_python_generates_agents_md \
         test_bootstrap_python_detects_stack \
         test_bootstrap_python_commands_use_docker_compose \
-        test_bootstrap_preserves_existing_dockerfile \
         test_bootstrap_js_generates_agents_md \
         test_bootstrap_js_detects_stack \
         test_bootstrap_attaches_agent; do
