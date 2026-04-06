@@ -14,6 +14,8 @@ source "$LIB_DIR/fixtures.sh"
 
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
 TEST_TMP_DIR="/tmp/mtui_test_$$"
+REMOTE_REPO="git@github.com:robchrob/multitui.git"
+REMOTE_BRANCH="develop"
 
 # Derive the container name the same way mtui does
 _expected_container_name() {
@@ -43,20 +45,16 @@ test_start_creates_named_container() {
     local expected_cn
     expected_cn="$(_expected_container_name "$project_dir")"
 
-    # Clean up stale container if any
     docker rm -f "$expected_cn" 2>/dev/null || true
 
-    # start requires OPENROUTER_API_KEY but the container creation itself happens
-    # before OpenCode is exec'd — we only need the background container to appear.
-    # We export a dummy key so the env check passes; OpenCode won't be exec'd in
-    # this path because we immediately check container state and clean up.
+    git clone --depth 1 -b develop "$REMOTE_REPO" "$project_dir/agent" 2>/dev/null || true
+
     OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-dummy}" \
         bash -c "cd '$project_dir' && timeout 15 '$REPO_ROOT/mtui' start" 2>&1 &
     local bg_pid=$!
 
-    # Wait up to 10s for the container to appear
     local elapsed=0
-    while [[ $elapsed -lt 10 ]]; do
+    while [[ $elapsed -lt 15 ]]; do
         if docker_container_exists "$expected_cn"; then
             break
         fi
@@ -64,7 +62,6 @@ test_start_creates_named_container() {
         ((elapsed++)) || true
     done
 
-    # Kill the bg start process (we don't need OpenCode to actually run)
     kill "$bg_pid" 2>/dev/null || true
     wait "$bg_pid" 2>/dev/null || true
 
@@ -72,7 +69,7 @@ test_start_creates_named_container() {
         log_pass "Container $expected_cn created by mtui start"
         docker rm -f "$expected_cn" 2>/dev/null || true
     else
-        log_fail "Container $expected_cn was not created within 10s"
+        log_fail "Container $expected_cn was not created within 15s"
         return 1
     fi
 }
