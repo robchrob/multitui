@@ -14,8 +14,9 @@ shopt -s nullglob
 MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
 REMOTE_BRANCH="${MTUI_BRANCH:-develop}"
-OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-stepfun/step-3.5-flash:free}"
+OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-openrouter/stepfun/step-3.5-flash:free}"
 #OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
+#OPENCODE_DEFAULT_MODEL="qwen/qwen3.6-plus:free"
 
 # --- Colors & Helpers ---
 C_RESET='\033[0m'
