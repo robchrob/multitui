@@ -46,15 +46,30 @@ academic, LinkedIn, blogs). Use when you need current answers that aren't in
 training data — package changelogs, obscure error messages, recent CVEs.
 Get a free key at exa.ai.
 
-### github _(requires GITHUB_TOKEN)_
-Full GitHub API via MCP: repos, PRs, issues, CI/CD, branches, file contents.
-Runs via `docker run ghcr.io/github/github-mcp-server` (DooD-safe).
-`GITHUB_DYNAMIC_TOOLSETS=1` keeps tool list compact — toolsets load on demand.
-Use for: reading issues, creating PRs, checking CI status, searching org code.
-
 ### deepwiki _(public GitHub repos, free, no key)_
 Turn any public GitHub repo into a searchable wiki. Search by description
 instead of file names. Useful for onboarding to large OSS codebases.
+
+### filesystem _(no key)_
+Read, write, list, move, copy, search files within the project directory.
+Path validation enforced. The AI can inspect and modify your codebase directly.
+
+### git _(no key)_
+Full git operations: status, log, diff, commit, branch, push, pull, merge.
+Exposes git CLI through MCP tools for version control without leaving the session.
+
+### fetch _(no key)_
+Fetch any URL and convert to clean markdown. Read documentation pages, blog
+posts, API docs, and any public web content. Lightweight and fast.
+
+### time _(no key)_
+Current time, timezone conversions, date calculations. Useful for log analysis,
+scheduling context, and time-sensitive data interpretation.
+
+### a2a-search _(no key)_
+Search 4,800+ MCP servers, AI agents, CLI tools, and agent skills.
+Ask: "Find MCP servers for [use case]" — returns install commands and config.
+No API key required. Use to discover new tools for any workflow need.
 
 ## Rules
 - `agent/` is READ-ONLY (cloned, not a submodule)

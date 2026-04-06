@@ -7,6 +7,8 @@ Year is 2026.
 - **context7**: Get version-specific docs for detected frameworks (run resolve-library-id first, then query-docs)
 - **deepwiki**: If user mentions a known repo/stack pattern (e.g., "like T3 Stack"), query deepwiki to understand structure
 - **exa search**: Search current best practices, troubleshooting, or common patterns for detected stack
+- **a2a-search**: Discover MCP servers relevant to this project's stack. Search for databases, APIs, testing, monitoring, deployment tools, or any stack-specific integrations. Use findings to generate MCPs.md with recommendations.
+- **a2a-search**: Discover MCP servers relevant to this project's stack. Search for databases, APIs, testing, monitoring, deployment tools, or any stack-specific integrations. Use findings to generate MCPs.md with recommendations.
 
 ## Your execution environment
 You are inside a Docker container with OpenCode + Docker CLI.
@@ -189,5 +191,19 @@ Check for existing .gitignore / .dockerignore first. If missing or incomplete, g
 - Docker artifacts if applicable
 
 If .gitignore exists, append missing patterns rather than overwriting. Never remove existing entries.
+
+### MCPs.md
+Use **a2a-search** to discover MCP servers relevant to this project's detected stack. Search for tools that would enhance the development workflow — databases, APIs, testing, monitoring, deployment, or any stack-specific integrations.
+
+Create MCPs.md with:
+
+#### Recommended MCP Servers
+For each discovered server that fits this project:
+- **Server name** and what it does
+- **Install command** (npx or pip)
+- **Whether it needs an API key**
+- **Why it's useful for this specific project**
+
+Focus on free, no-key-required servers first. Include 3-5 high-value recommendations.
 
 Write all files directly.

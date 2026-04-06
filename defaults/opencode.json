@@ -121,6 +121,31 @@
       "type": "remote",
       "url": "https://mcp.deepwiki.com/mcp",
       "enabled": true
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "{env:PROJECT_ROOT}"],
+      "enabled": true
+    },
+    "git": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-git"],
+      "enabled": true
+    },
+    "fetch": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-fetch"],
+      "enabled": true
+    },
+    "time": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-time"],
+      "enabled": true
+    },
+    "a2a-search": {
+      "type": "local",
+      "command": ["npx", "-y", "a2asearch-mcp"],
+      "enabled": true
     }
   }
 }
