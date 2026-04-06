@@ -43,26 +43,6 @@ mtui start # work on the project
 *REQUIRES*: docker, `OPENROUTER_API_KEY` environment variable set.
 *OPTIONAL*: TODO api keys used in our setup (read from mtui)
 
-## Getting Started
-### New project
-```bash
-mkdir my-app && cd my-app && git init
-mtui init "React + Vite"
-mtui start
-```
-
-### Existing project
-```bash
-cd my-project
-mtui bootstrap "analyze this codebase"
-mtui start
-```
-
-### Work / Resume
-```bash
-mtui start
-```
-
 ---
 
 ## CLI Reference
@@ -82,6 +62,21 @@ mtui start
 
 ---
 
+## Config
+TODO we must mention env variables MTUI_REMOTE, MTUI_BRANCH and MTUI_MODEL configuration (user must point to fork for branching funcitionality).
+
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` | Per-project environment, stack, commands |
+| `defaults/opencode.json` | OpenCode configuration |
+| `defaults/skills/*` | Reusable SKILL.md templates |
+| `defaults/commands/*` | Command templates |
+| `prompts/init.md` | New project AI prompt |
+| `prompts/bootstrap.md` | Existing project AI prompt |
+| `docker/Dockerfile` | Runtime image (Alpine + OpenCode + Docker CLI) |
+
+---
+
 ## Branch Workflow
 Isolate changes on `develop-<project>` branches:
 
@@ -98,19 +93,6 @@ mtui branch status
 
 Branches auto-rebase onto `develop` when running `mtui attach`/`start`. 
 CONFLICT: Fix inside `agent/` repo, then `mtui update --continue`.
-
----
-
-## Config
-| File | Purpose |
-|------|---------|
-| `AGENTS.md` | Per-project environment, stack, commands |
-| `defaults/opencode.json` | OpenCode configuration |
-| `defaults/skills/*` | Reusable SKILL.md templates |
-| `defaults/commands/*` | Command templates |
-| `prompts/init.md` | New project AI prompt |
-| `prompts/bootstrap.md` | Existing project AI prompt |
-| `docker/Dockerfile` | Runtime image (Alpine + OpenCode + Docker CLI) |
 
 ---
 

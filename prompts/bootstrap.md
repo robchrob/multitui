@@ -96,11 +96,10 @@ Include these six sections:
   [one-line description]
 
   ## Environment
-  This project uses MultiTUI — OpenCode runs inside a Docker container with DooD access.
+  This project uses MultiTUI — OpenCode runs inside a Docker container
  CRITICAL: Load @agent/AGENTS.md (./agent/AGENTS.md) for execution environment details
   All code execution uses: docker / docker compose
-
-  **User**: dev (not root)
+  **User**: dev - sudo IS available if needed!
 
 #### 2. Stack
 Exact versions only — not what's inferable from package.json.
