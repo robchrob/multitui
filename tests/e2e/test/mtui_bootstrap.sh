@@ -91,8 +91,9 @@ teardown() {
     [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js" 2>/dev/null || true
 
     log_info "Artifacts saved to $run_dir"
-    # Use sudo to remove files created inside containers (owned by container user)
-    sudo rm -rf "$TEST_TMP_DIR" 2>/dev/null || rm -rf "$TEST_TMP_DIR" 2>/dev/null || true
+    rm -rf "$TEST_TMP_DIR" 2>/dev/null || {
+        docker run --rm -v "$TEST_TMP_DIR:/tmp/cleanup:rw" alpine rm -rf /tmp/cleanup 2>/dev/null || true
+    }
 }
 
 # ── Python assertions ──────────────────────────────────────────────────────
@@ -195,6 +196,7 @@ test_bootstrap_attaches_agent() {
 }
 
 main() {
+    trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT
     setup
     set +e
     local passed=0 failed=0

@@ -13,10 +13,9 @@ set -Eeuo pipefail
 shopt -s nullglob
 
 MTUI_HOME="$HOME/.multitui"
-REMOTE_REPO="git@github.com:robchrob/multitui.git"
+REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
 REMOTE_BRANCH="develop"
 OPENCODE_DEFAULT_MODEL="opencode/minimax-m2.5-free"
-#OPENCODE_DEFAULT_MODEL="opencode/qwen3.6-plus-free"
 
 # --- Colors & Helpers ---
 C_RESET='\033[0m'
@@ -76,7 +75,18 @@ _ensure_gitignore_entry() {
     done
 }
 
+_project_branch() {
+    if [[ -f ".mtui-branch" ]]; then
+        cat ".mtui-branch"
+    else
+        echo "$REMOTE_BRANCH"
+    fi
+}
+
 _attach() {
+    local branch
+    branch="$(_project_branch)"
+
     local agent_ok=0
 
     if [[ -d "agent/.git" ]]; then
@@ -86,18 +96,49 @@ _attach() {
     fi
 
     if [[ "$agent_ok" -ne 1 ]]; then
-        _log "Agent missing or broken, re-cloning..."
+        _log "Agent missing or broken, re-cloning branch: $branch..."
         rm -rf agent .git/modules/agent
         git config --remove-section submodule.agent >/dev/null 2>&1 || true
-        git clone --depth 1 -b "$REMOTE_BRANCH" "$REMOTE_REPO" agent
+        
+        # Try to clone the specified branch, fall back to default branch if it doesn't exist
+        if ! git clone --depth 1 -b "$branch" "$REMOTE_REPO" agent 2>/dev/null; then
+            git clone --depth 1 "$REMOTE_REPO" agent
+            if [[ "$branch" != "develop" ]]; then
+                git -C agent checkout -q "$branch" 2>/dev/null || true
+            fi
+        fi
     fi
 
     _ensure_gitignore_entry
 
-    _log "Updating agent to latest $REMOTE_BRANCH..."
-    git -C agent fetch origin "$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
-    git -C agent checkout -q "$REMOTE_BRANCH" >/dev/null 2>&1 || true
-    git -C agent reset --hard "origin/$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
+    local current_branch
+    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo "$REMOTE_BRANCH")"
+
+    if [[ "$current_branch" != "$branch" ]]; then
+        _log "Switching agent to branch: $branch..."
+        git -C agent fetch origin -q >/dev/null 2>&1 || true
+        if git rev-parse "origin/$branch" >/dev/null 2>&1; then
+            git -C agent checkout -q "$branch" >/dev/null 2>&1 || \
+                git -C agent checkout -b "$branch" -t origin/"$branch" -q 2>/dev/null || true
+        fi
+    fi
+
+    if [[ "$branch" == "$REMOTE_BRANCH" ]]; then
+        _log "Updating agent to latest $branch..."
+        git -C agent fetch origin "$branch" -q >/dev/null 2>&1 || true
+        git -C agent checkout -q "$branch" >/dev/null 2>&1 || true
+        git -C agent reset --hard "origin/$branch" -q >/dev/null 2>&1 || true
+    else
+        _log "Updating agent branch $branch (safe rebase)..."
+        git -C agent fetch origin "$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
+        git -C agent fetch origin "$branch" -q >/dev/null 2>&1 || true
+        if git -C agent rebase "origin/$REMOTE_BRANCH" >/dev/null 2>&1; then
+            : # rebase succeeded
+        else
+            _warn "Rebase conflicts detected. Resolve in agent/ then run 'mtui update --continue'"
+            exit 1
+        fi
+    fi
 }
 
 # Build the common docker flags array used by both _run_opencode and cmd_start.
@@ -157,22 +198,24 @@ _run_opencode() {
 # --- Core Commands ---
 
 cmd_setup() {
-    _log "Setting up MultiTUI globally in $MTUI_HOME..."
+    _log "Installing mtui to ~/.local/bin..."
 
-    if [[ ! -d "$MTUI_HOME" ]]; then
-        _log "Cloning framework ($REMOTE_BRANCH)..."
-        git clone "$REMOTE_REPO" -b "$REMOTE_BRANCH" "$MTUI_HOME"
+    local mtui_link="$HOME/.local/bin/mtui"
+    mkdir -p "$HOME/.local/bin"
+
+    local mtui_source
+    if [[ -f "$PWD/mtui" ]]; then
+        mtui_source="$PWD/mtui"
     else
-        _log "Updating framework ($REMOTE_BRANCH)..."
-        git -C "$MTUI_HOME" checkout "$REMOTE_BRANCH" -q 2>/dev/null || \
-            git -C "$MTUI_HOME" checkout -B "$REMOTE_BRANCH" "origin/$REMOTE_BRANCH" -q 2>/dev/null || true
-        git -C "$MTUI_HOME" pull origin "$REMOTE_BRANCH" -q 2>/dev/null || true
+        mtui_source="https://raw.githubusercontent.com/robchrob/multitui/$REMOTE_BRANCH/mtui"
     fi
 
-    _log "Linking mtui to ~/.local/bin/mtui..."
-    mkdir -p "$HOME/.local/bin"
-    chmod +x "$MTUI_HOME/mtui"
-    ln -sf "$MTUI_HOME/mtui" "$HOME/.local/bin/mtui"
+    if [[ -f "$mtui_source" ]]; then
+        cp "$mtui_source" "$mtui_link"
+    else
+        curl -fsSL "$mtui_source" -o "$mtui_link"
+    fi
+    chmod +x "$mtui_link"
 
     cmd_build
 
@@ -188,9 +231,6 @@ cmd_build() {
         shift
     done
 
-    # Prefer agent/docker/Dockerfile from the local project clone when available,
-    # so the locally-checked-out agent is actually used rather than always deferring
-    # to the globally-installed ~/.multitui copy.
     local dockerfile_dir
     if [[ -f "agent/docker/Dockerfile" ]]; then
         dockerfile_dir="$PWD/agent/docker"
@@ -199,7 +239,11 @@ cmd_build() {
         dockerfile_dir="$MTUI_HOME/docker"
         _log "Using global ~/.multitui/docker/Dockerfile"
     else
-        _err "No Dockerfile found. Run 'mtui setup' first, or attach an agent with 'mtui init'."
+        _log "No agent/ or ~/.multitui found, fetching Dockerfile from GitHub..."
+        local tmpdir
+        tmpdir=$(mktemp -d)
+        curl -fsSL "https://raw.githubusercontent.com/robchrob/multitui/$REMOTE_BRANCH/docker/Dockerfile" -o "$tmpdir/Dockerfile" || _err "Failed to fetch Dockerfile"
+        dockerfile_dir="$tmpdir"
     fi
 
     local build_args=(
@@ -232,6 +276,10 @@ cmd_build() {
         "${build_args[@]}" \
         -f "$dockerfile_dir/Dockerfile" \
         -t multitui "$dockerfile_dir"
+
+    if [[ "$dockerfile_dir" == /tmp/* ]]; then
+        rm -rf "$(dirname "$dockerfile_dir")"
+    fi
 
     echo -e "${C_GREEN}[✔] Build complete.${C_RESET}"
 }
@@ -373,10 +421,19 @@ cmd_status() {
     if [[ -d "agent" ]]; then
         local agent_branch
         agent_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
-        echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch)"
+        
+        if [[ -f ".mtui-branch" ]]; then
+            echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch, project branch)"
+        else
+            echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch)"
+        fi
     else
         echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_RED}Missing${C_RESET} (Run mtui init)"
     fi
+
+    [[ -f ".mtui-branch" ]] && \
+        echo -e "${C_BOLD}Project Branch:${C_RESET}    $(cat .mtui-branch)" || \
+        echo -e "${C_BOLD}Project Branch:${C_RESET}    $REMOTE_BRANCH (default)"
 
     [[ -f "AGENTS.md" ]] && \
         echo -e "${C_BOLD}AGENTS.md:${C_RESET}          ${C_GREEN}Found${C_RESET}" || \
@@ -394,14 +451,142 @@ cmd_status() {
     fi
 }
 
+cmd_branch_create() {
+    local branch_name
+    branch_name="$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')"
+    branch_name="develop-${branch_name}"
+
+    _log "Creating project branch: $branch_name..."
+
+    if [[ ! -d "agent" ]]; then
+        _log "Attaching agent (develop) first..."
+        _attach
+    fi
+
+    local current_branch
+    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null)"
+
+    # If not on develop, switch to develop first
+    if [[ "$current_branch" != "$REMOTE_BRANCH" ]]; then
+        _log "Switching from $current_branch to develop..."
+        git -C agent fetch origin -q 2>/dev/null || true
+        git -C agent checkout -q "$REMOTE_BRANCH" 2>/dev/null || \
+            git -C agent checkout -b "$REMOTE_BRANCH" origin/"$REMOTE_BRANCH" -q 2>/dev/null || true
+    fi
+
+    # Now create/tracking the project branch
+    git -C agent fetch origin -q 2>/dev/null || true
+    
+    # Check if branch already exists remotely
+    if git -C agent rev-parse "origin/$branch_name" >/dev/null 2>&1; then
+        _log "Branch $branch_name exists remotely, tracking it..."
+        git -C agent checkout -q "$branch_name" 2>/dev/null || \
+            git -C agent checkout -b "$branch_name" -t origin/"$branch_name" -q
+    else
+        git -C agent checkout -b "$branch_name" 2>/dev/null || \
+            git -C agent checkout -q "$branch_name" 2>/dev/null || \
+            _err "Branch $branch_name already exists locally. Delete it first or check it out manually."
+        git -C agent push -u origin "$branch_name" 2>/dev/null || _err "Failed to push branch to remote"
+    fi
+
+    echo "$branch_name" > .mtui-branch
+    _log "Wrote .mtui-branch"
+
+    if [[ -d ".git" ]]; then
+        if ! grep -qxF ".mtui-branch" .gitignore 2>/dev/null; then
+            echo ".mtui-branch" >> .gitignore
+        fi
+        git add .mtui-branch 2>/dev/null || true
+        git commit -m "Add .mtui-branch for project branch tracking" 2>/dev/null || true
+        _log "Committed .mtui-branch to project repo"
+    fi
+
+    echo -e "${C_GREEN}[✔] Branch $branch_name created and tracked.${C_RESET}"
+    _log "Run 'mtui update' to sync with develop"
+}
+
+cmd_branch_status() {
+    if [[ -d "agent" ]]; then
+        local current_branch ahead behind
+        current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
+        
+        git -C agent fetch origin -q 2>/dev/null || true
+        
+        local base_branch="$REMOTE_BRANCH"
+        if [[ -f ".mtui-branch" ]]; then
+            base_branch="$(cat .mtui-branch)"
+        fi
+        
+        if [[ "$current_branch" != "$REMOTE_BRANCH" ]]; then
+            local revs_ahead behind
+            ahead="$(git -C agent rev-list --count "origin/$REMOTE_BRANCH".."$current_branch" 2>/dev/null || echo '?')"
+            behind="$(git -C agent rev-list --count "$current_branch"..origin/"$REMOTE_BRANCH" 2>/dev/null || echo '?')"
+            
+            echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch"
+            echo -e "${C_BOLD}Base branch:${C_RESET}    $REMOTE_BRANCH"
+            echo -e "${C_BOLD}Ahead of develop:${C_RESET} $ahead commits"
+            echo -e "${C_BOLD}Behind develop:${C_RESET} $behind commits"
+        else
+            echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch (tracking $REMOTE_BRANCH)"
+            echo -e "${C_BOLD}Status:${C_RESET} Up to date with develop"
+        fi
+        
+        local last_fetch
+        last_fetch="$(git -C agent log -1 --format='%ci' origin/$REMOTE_BRANCH 2>/dev/null | cut -d' ' -f1,2 | cut -d'T' -f1 || echo 'unknown')"
+        echo -e "${C_BOLD}Last updated:${C_RESET} $last_fetch"
+    else
+        _err "Agent not attached. Run 'mtui init' or 'mtui branch create' first."
+    fi
+}
+
+cmd_update() {
+    if [[ ! -f ".mtui-branch" ]]; then
+        _err "No .mtui-branch file. Run 'mtui branch create' first."
+    fi
+
+    local branch
+    branch="$(cat .mtui-branch)"
+
+    if [[ ! -d "agent" ]]; then
+        _err "Agent not attached. Run 'mtui init' or 'mtui branch create' first."
+    fi
+
+    if [[ -f ".git/rebase-merge" ]] || [[ -d ".git/rebase-merge" ]]; then
+        _log "Rebase in progress, continuing..."
+        git -C agent rebase --continue 2>/dev/null || _err "Rebase failed. Resolve conflicts manually in agent/"
+        echo -e "${C_GREEN}[✔] Rebase completed.${C_RESET}"
+        return 0
+    fi
+
+    _log "Updating $branch from $REMOTE_BRANCH..."
+
+    git -C agent fetch origin -q || _err "Failed to fetch from origin"
+    git -C agent fetch origin "$REMOTE_BRANCH" -q || _err "Failed to fetch develop"
+    git -C agent fetch origin "$branch" -q || true
+
+    local current_branch
+    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD)"
+    if [[ "$current_branch" != "$branch" ]]; then
+        git -C agent checkout -q "$branch" || _err "Failed to checkout $branch"
+    fi
+
+    if git -C agent rebase "origin/$REMOTE_BRANCH" 2>&1; then
+        git -C agent push -f origin "$branch" 2>/dev/null || _warn "Could not push (may not have permission)"
+        echo -e "${C_GREEN}[✔] Updated $branch to latest develop.${C_RESET}"
+    else
+        _warn "Rebase conflicts detected in agent/"
+        _log "Resolve conflicts in agent/, then run 'mtui update --continue'"
+        return 1
+    fi
+}
+
 show_help() {
     echo -e "${C_BOLD}MultiTUI (mtui) — OpenCode Docker Orchestrator${C_RESET}"
     echo "Usage: mtui <command> [args]"
     echo ""
     echo -e "${C_BOLD}Global Commands:${C_RESET}"
-    echo "  setup                     Install or update framework globally to ~/.multitui"
+    echo "  setup                     Install or update mtui binary"
     echo "  build [--no-cache]        Build or update the 'multitui' base Docker image"
-    echo "                            Prefers agent/docker/Dockerfile if present locally"
     echo "  list, ls                  List all MultiTUI containers on this machine"
     echo ""
     echo -e "${C_BOLD}Project Commands:${C_RESET}"
@@ -412,6 +597,11 @@ show_help() {
     echo "                            -p H:C  Expose additional port (set at creation)"
     echo "  stop, clean               Stop and remove the container for this project"
     echo "  status                    Show health and status of current project's setup"
+    echo ""
+    echo -e "${C_BOLD}Branch Commands:${C_RESET}"
+    echo "  branch create             Create and track a project-specific branch"
+    echo "  branch status             Show branch info and divergence from develop"
+    echo "  update [--continue]      Rebase project branch onto latest develop"
     echo ""
     echo -e "${C_BOLD}Session Tips:${C_RESET}"
     echo "  Container runs in background - stays alive until 'mtui clean'"
@@ -455,6 +645,18 @@ case "$COMMAND" in
         ;;
     status)
         cmd_status
+        ;;
+    branch)
+        case "${1:-}" in
+            create)   cmd_branch_create "$@" ;;
+            status)   cmd_branch_status "$@" ;;
+            *)        _err "Unknown branch command: ${1:-}
+Run 'mtui branch create' or 'mtui branch status'"
+            ;;
+        esac
+        ;;
+    update)
+        cmd_update "$@"
         ;;
     -h|--help)
         show_help

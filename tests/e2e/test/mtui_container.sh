@@ -180,6 +180,7 @@ test_list_shows_running_container() {
 }
 
 main() {
+    trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT
     setup
     set +e
     local passed=0 failed=0
