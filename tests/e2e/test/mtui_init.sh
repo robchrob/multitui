@@ -84,14 +84,15 @@ setup() {
 
 teardown() {
     local status="${1:-unknown}"
-    local run_dir
-    run_dir="$REPO_ROOT/tests/e2e/output/$(date +%Y%m%d_%H%M%S)_init_${status}"
-    mkdir -p "$run_dir"
+    local output_dir="$REPO_ROOT/tests/e2e/output"
+    mkdir -p "$output_dir"
 
-    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py" 2>/dev/null || true
-    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js" 2>/dev/null || true
+    log_info "Output dir: $output_dir"
 
-    log_info "Artifacts saved to $run_dir"
+    local all_runs
+    all_runs=$(ls -1t "$output_dir"/ 2>/dev/null | grep '_init_' | tail -n +3)
+    [[ -n "$all_runs" ]] && rm -rf "$all_runs" 2>/dev/null || true
+
     rm -rf "$TEST_TMP_DIR" 2>/dev/null || {
         docker run --rm -v "$TEST_TMP_DIR:/tmp/cleanup:rw" alpine rm -rf /tmp/cleanup 2>/dev/null || true
     }

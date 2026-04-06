@@ -80,18 +80,33 @@ run_suite() {
     log_test "Suite: $suite_name"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+    local output_dir="$REPO_ROOT/tests/e2e/output"
+    mkdir -p "$output_dir"
+    local timestamp
+    timestamp="$(date +%Y%m%d_%H%M%S)"
+    local log_file="$output_dir/${timestamp}_${suite_name}.log"
+
     local start
     start=$(date +%s)
 
-    if bash "$suite_file"; then
+    if bash "$suite_file" 2>&1 | tee "$log_file"; then
         local elapsed=$(( $(date +%s) - start ))
         log_pass "$suite_name — ${elapsed}s"
-        return 0
     else
         local elapsed=$(( $(date +%s) - start ))
         log_fail "$suite_name — ${elapsed}s"
-        return 1
     fi
+
+    cleanup_old_outputs "$output_dir" "$suite_name"
+}
+
+cleanup_old_outputs() {
+    local output_dir="$1"
+    local suite_name="$2"
+    
+    local all_runs
+    all_runs=$(ls -1t "$output_dir"/"*"_"${suite_name}.log" 2>/dev/null | tail -n +3)
+    [[ -n "$all_runs" ]] && rm -f $all_runs 2>/dev/null || true
 }
 
 run_all_tests() {
