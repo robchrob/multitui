@@ -4,6 +4,12 @@
 #
 # Design: ONE `mtui bootstrap` call per stack. All assertions reuse the
 # same generated directory — no redundant AI runs.
+#
+# WARNING: Individual test functions CANNOT be sourced and called directly.
+# They depend on setup() having run first. Always run via the suite runner:
+#   ./tests/e2e/test/run.sh -f bootstrap
+# or via main():
+#   bash tests/e2e/test/mtui_bootstrap.sh
 
 set -Eeuo pipefail
 
@@ -20,6 +26,21 @@ TEST_TMP_DIR="/tmp/mtui_test_$$"
 
 PY_DIR=""
 JS_DIR=""
+
+# Guard: called at the top of every test function to ensure setup() ran.
+# Without this, an empty PY_DIR/JS_DIR causes mtui to operate on CWD (the repo root).
+_require_fixtures() {
+    if [[ -z "${PY_DIR:-}" || ! -d "$PY_DIR" ]]; then
+        log_fail "ISOLATION ERROR: PY_DIR is unset or missing. setup() must run before test functions."
+        log_fail "Run this suite via: ./tests/e2e/test/run.sh -f bootstrap"
+        exit 1
+    fi
+    if [[ -z "${JS_DIR:-}" || ! -d "$JS_DIR" ]]; then
+        log_fail "ISOLATION ERROR: JS_DIR is unset or missing. setup() must run before test functions."
+        log_fail "Run this suite via: ./tests/e2e/test/run.sh -f bootstrap"
+        exit 1
+    fi
+}
 
 setup() {
     if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
@@ -66,22 +87,25 @@ teardown() {
     run_dir="$REPO_ROOT/tests/e2e/output/$(date +%Y%m%d_%H%M%S)_bootstrap_${status}"
     mkdir -p "$run_dir"
 
-    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py"
-    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js"
+    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py" 2>/dev/null || true
+    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js" 2>/dev/null || true
 
     log_info "Artifacts saved to $run_dir"
-    rm -rf "$TEST_TMP_DIR"
+    # Use sudo to remove files created inside containers (owned by container user)
+    sudo rm -rf "$TEST_TMP_DIR" 2>/dev/null || rm -rf "$TEST_TMP_DIR" 2>/dev/null || true
 }
 
 # ── Python assertions ──────────────────────────────────────────────────────
 
 test_bootstrap_python_generates_agents_md() {
+    _require_fixtures
     log_test "Python bootstrap generates AGENTS.md..."
     assert_file_exists "$PY_DIR/AGENTS.md" "AGENTS.md not generated" || return 1
     log_pass "AGENTS.md generated"
 }
 
 test_bootstrap_python_detects_stack() {
+    _require_fixtures
     log_test "Python bootstrap detects Python/uv stack..."
 
     local agents="$PY_DIR/AGENTS.md"
@@ -101,6 +125,7 @@ test_bootstrap_python_detects_stack() {
 }
 
 test_bootstrap_python_commands_use_docker_compose() {
+    _require_fixtures
     log_test "Python AGENTS.md Commands section uses docker compose..."
 
     local agents="$PY_DIR/AGENTS.md"
@@ -111,6 +136,7 @@ test_bootstrap_python_commands_use_docker_compose() {
 }
 
 test_bootstrap_preserves_existing_dockerfile() {
+    _require_fixtures
     log_test "bootstrap does not overwrite an existing Dockerfile..."
 
     if ! grep -q "SENTINEL" "$PY_DIR/Dockerfile"; then
@@ -124,12 +150,14 @@ test_bootstrap_preserves_existing_dockerfile() {
 # ── JS assertions ──────────────────────────────────────────────────────────
 
 test_bootstrap_js_generates_agents_md() {
+    _require_fixtures
     log_test "JS bootstrap generates AGENTS.md..."
     assert_file_exists "$JS_DIR/AGENTS.md" "AGENTS.md not generated" || return 1
     log_pass "AGENTS.md generated"
 }
 
 test_bootstrap_js_detects_stack() {
+    _require_fixtures
     log_test "JS bootstrap detects JS/bun stack..."
 
     local agents="$JS_DIR/AGENTS.md"
@@ -151,6 +179,7 @@ test_bootstrap_js_detects_stack() {
 # ── Shared ─────────────────────────────────────────────────────────────────
 
 test_bootstrap_attaches_agent() {
+    _require_fixtures
     log_test "bootstrap attaches the agent/ directory..."
 
     local failed=0

@@ -5,6 +5,12 @@
 # Design: ONE `mtui init` call per stack (Python, JS). All assertions for
 # that stack reuse the same generated directory. This avoids re-running
 # the AI for every individual assertion.
+#
+# WARNING: Individual test functions CANNOT be sourced and called directly.
+# They depend on setup() having run first. Always run via the suite runner:
+#   ./tests/e2e/test/run.sh -f init
+# or via main():
+#   bash tests/e2e/test/mtui_init.sh
 
 set -Eeuo pipefail
 
@@ -22,6 +28,21 @@ TEST_TMP_DIR="/tmp/mtui_test_$$"
 # Set by setup — reused by all tests
 PY_DIR=""
 JS_DIR=""
+
+# Guard: called at the top of every test function to ensure setup() ran.
+# Without this, an empty PY_DIR/JS_DIR causes mtui to operate on CWD (the repo root).
+_require_fixtures() {
+    if [[ -z "${PY_DIR:-}" || ! -d "$PY_DIR" ]]; then
+        log_fail "ISOLATION ERROR: PY_DIR is unset or missing. setup() must run before test functions."
+        log_fail "Run this suite via: ./tests/e2e/test/run.sh -f init"
+        exit 1
+    fi
+    if [[ -z "${JS_DIR:-}" || ! -d "$JS_DIR" ]]; then
+        log_fail "ISOLATION ERROR: JS_DIR is unset or missing. setup() must run before test functions."
+        log_fail "Run this suite via: ./tests/e2e/test/run.sh -f init"
+        exit 1
+    fi
+}
 
 setup() {
     if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
@@ -67,16 +88,18 @@ teardown() {
     run_dir="$REPO_ROOT/tests/e2e/output/$(date +%Y%m%d_%H%M%S)_init_${status}"
     mkdir -p "$run_dir"
 
-    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py"
-    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js"
+    [[ -n "$PY_DIR" && -d "$PY_DIR" ]] && cp -r "$PY_DIR" "$run_dir/py" 2>/dev/null || true
+    [[ -n "$JS_DIR" && -d "$JS_DIR" ]] && cp -r "$JS_DIR" "$run_dir/js" 2>/dev/null || true
 
     log_info "Artifacts saved to $run_dir"
-    rm -rf "$TEST_TMP_DIR"
+    # Use sudo to remove files created inside containers (owned by container user)
+    sudo rm -rf "$TEST_TMP_DIR" 2>/dev/null || rm -rf "$TEST_TMP_DIR" 2>/dev/null || true
 }
 
 # ── Python assertions ──────────────────────────────────────────────────────
 
 test_init_python_generates_files() {
+    _require_fixtures
     log_test "Python init generates AGENTS.md, Dockerfile, docker-compose.yml..."
 
     local missing=()
@@ -93,6 +116,7 @@ test_init_python_generates_files() {
 }
 
 test_init_python_agents_md_stack() {
+    _require_fixtures
     log_test "Python AGENTS.md mentions Python/uv, not bun..."
 
     local agents="$PY_DIR/AGENTS.md"
@@ -115,6 +139,7 @@ test_init_python_agents_md_stack() {
 }
 
 test_init_python_compose_valid() {
+    _require_fixtures
     log_test "Python docker-compose.yml passes validation..."
 
     local compose="$PY_DIR/docker-compose.yml"
@@ -132,6 +157,7 @@ test_init_python_compose_valid() {
 # ── JS assertions ──────────────────────────────────────────────────────────
 
 test_init_js_generates_files() {
+    _require_fixtures
     log_test "JS init generates AGENTS.md, Dockerfile, docker-compose.yml..."
 
     local missing=()
@@ -148,6 +174,7 @@ test_init_js_generates_files() {
 }
 
 test_init_js_agents_md_stack() {
+    _require_fixtures
     log_test "JS AGENTS.md mentions bun/node, not uv..."
 
     local agents="$JS_DIR/AGENTS.md"
@@ -170,6 +197,7 @@ test_init_js_agents_md_stack() {
 }
 
 test_init_js_compose_valid() {
+    _require_fixtures
     log_test "JS docker-compose.yml passes validation..."
 
     local compose="$JS_DIR/docker-compose.yml"
@@ -187,6 +215,7 @@ test_init_js_compose_valid() {
 # ── Shared ─────────────────────────────────────────────────────────────────
 
 test_init_attaches_agent() {
+    _require_fixtures
     log_test "mtui init attaches the agent/ directory..."
 
     local failed=0

@@ -1,18 +1,18 @@
 ${USER_INSTRUCTION:+USER INSTRUCTION: ${USER_INSTRUCTION}
 }
-You are setting up a agentic environment + initial functional version for new NEW EMPTY project.
+You are setting up an agentic environment + initial functional version for a NEW EMPTY project.
 Project name: "${PROJECT_NAME}"
 
-## Step 0 — Detect intent
-From the project name or user instruction, detect:
-- Language: JavaScript/TypeScript, Python, or Other
-- Frameworks: use exa search / context7
-- Purpose: API, webapp, CLI tool, etc.
+## THIS IS A NEW EMPTY PROJECT
+Derive intent entirely from the project name and user instruction above.
+Do NOT explore the filesystem to detect the stack — there is nothing meaningful there.
+The only pre-existing files may be the fixture stubs created by the test harness (ignored).
 
-Use tools to help:
-- web search / reseatch → exa search
-- Unfamiliar framework → deepwiki_ask_question to understand typical project structure
-- Need version-specific docs → context7_resolve-library-id + context7_query-docs
+## Step 0 — Decide intent
+From the project name and user instruction only, determine:
+- Language: JavaScript/TypeScript, Python, or Other
+- Framework and purpose: API, webapp, CLI tool, etc.
+- Use exa search / context7 for version-specific docs on the chosen stack
 
 ## Your execution environment
 You are inside a Docker container with Alpine + OpenCode + Docker CLI.
@@ -21,7 +21,7 @@ NO language runtimes exist here. ALL code execution uses DooD:
   docker compose
 
 ## Runtime conventions
-This project uses specific runtimes — apply them precisely:
+Apply these precisely for known stacks, or follow their spirit for others:
 
 ### JavaScript/TypeScript projects
 - Package manager: bun (never npm/yarn/pnpm)
@@ -138,10 +138,10 @@ If everything follows standard framework conventions, omit this section entirely
   ## Permissions
   ### Allowed without asking
   - All project files (outside agent/)
-  
+
   ### Ask first
   - Modify agent/ directory (MultiTUI framework - see @agent/AGENTS.md)
-  
+
   ### Never do
   - Commit changes to agent/ submodule
   - Read .env files
