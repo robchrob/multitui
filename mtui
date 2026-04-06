@@ -233,14 +233,11 @@ cmd_build() {
     done
 
     local dockerfile_dir
-    if [[ -f "agent/docker/Dockerfile" ]]; then
-        dockerfile_dir="$PWD/agent/docker"
-        _log "Using local agent/docker/Dockerfile"
-    elif [[ -f "$MTUI_HOME/docker/Dockerfile" ]]; then
-        dockerfile_dir="$MTUI_HOME/docker"
-        _log "Using global ~/.multitui/docker/Dockerfile"
+    if [[ -f "docker/Dockerfile" ]]; then
+        dockerfile_dir="$PWD/docker"
+        _log "Using local docker/Dockerfile"
     else
-        _log "No agent/ or ~/.multitui found, fetching Dockerfile from GitHub..."
+        _log "No local Dockerfile found, fetching from GitHub..."
         local tmpdir
         tmpdir=$(mktemp -d)
         curl -fsSL "https://raw.githubusercontent.com/robchrob/multitui/$REMOTE_BRANCH/docker/Dockerfile" -o "$tmpdir/Dockerfile" || _err "Failed to fetch Dockerfile"
