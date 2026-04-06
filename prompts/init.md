@@ -2,6 +2,7 @@ ${USER_INSTRUCTION:+USER INSTRUCTION: ${USER_INSTRUCTION}
 }
 You are setting up an agentic environment + initial functional version for a NEW EMPTY project.
 Project name: "${PROJECT_NAME}"
+Year is 2026.
 
 ## THIS IS A NEW EMPTY PROJECT
 Derive intent entirely from the project name and user instruction above.
