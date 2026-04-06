@@ -55,15 +55,19 @@ tests/e2e/
 
 ### Testing Hierarchy
 ```bash
-# Single test function (fastest feedback)
+# Single test function — only works for suites that create their own fixtures inline
+# (mtui_container, mtui_build, mtui_opencode, mtui_setup)
+# DO NOT use this pattern for mtui_init or mtui_bootstrap — they require setup() to run first
 bash -c 'source tests/e2e/test/mtui_container.sh && test_status_no_container'
 
-# Single suite
+# Single suite (always safe — runs setup() + all tests + teardown)
 ./tests/e2e/test/run.sh -f container
 
 # Full suite
 ./tests/e2e/test/run.sh
 ```
+
+> **init/bootstrap tests cannot be run as single functions.** They share expensive AI setup across all assertions — call the suite directly: `./tests/e2e/test/run.sh -f init`
 
 ### Test Suite Architecture
 - **Build gate**: `run.sh` checks `docker images -q multitui` once before any suite. Builds only if missing. Individual suites never build.

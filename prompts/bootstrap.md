@@ -38,31 +38,48 @@ If the stack is NOT JS or Python, be flexible but stick to DooD best practices:
 - All commands in AGENTS.md must be 'docker compose run' or 'docker run'.
 
 ## Step 1 — discover the project
-Run these to understand the structure:
 
-  # Full tree excluding junk
-  find . -maxdepth 3 -not -path '*/.*' -not -path './node_modules/*' -not -path './agent/*'
+Run these commands to understand the structure. Read only what they return — do not recurse further.
 
-  # Look for manifests, docs, and entry points
-  find . -maxdepth 3 \
-    -not -path './.git/*' \
-    -not -path './node_modules/*' \
-    -not -path './agent/*' \
-    \( -name 'package.json' -o -name 'bun.lock' -o -name 'pyproject.toml' \
-       -o -name 'requirements*.txt' -o -name 'uv.lock' -o -name '*.md' \
-       -o -name 'go.mod' -o -name 'Cargo.toml' -o -name 'Gemfile' \
-       -o -name 'Dockerfile*' -o -name 'docker-compose*.yml' \
-       -o -name 'vite.config.*' -o -name 'app.config.*' \) \
-    -type f | sort
+```bash
+# Manifests and key config files only — stops at depth 3, skips all dependency dirs
+find . -maxdepth 3 \
+  -not -path './.git/*' \
+  -not -path './node_modules/*' \
+  -not -path './agent/*' \
+  -not -path './.venv/*' \
+  -not -path './venv/*' \
+  -not -path './__pycache__/*' \
+  -not -path './target/*' \
+  -not -path './vendor/*' \
+  -not -path './dist/*' \
+  -not -path './build/*' \
+  \( -name 'package.json' -o -name 'bun.lock' -o -name 'pyproject.toml' \
+     -o -name 'requirements*.txt' -o -name 'uv.lock' -o -name '*.md' \
+     -o -name 'go.mod' -o -name 'Cargo.toml' -o -name 'Gemfile' \
+     -o -name 'Dockerfile*' -o -name 'docker-compose*.yml' \
+     -o -name 'vite.config.*' -o -name 'app.config.*' \) \
+  -type f | sort
+```
 
-Reading priority:
-  1. All manifests found (package.json, pyproject.toml, go.mod, etc.)
-  2. Any markdown files (README.md, details.md, etc.) to understand the context
-  3. Existing Dockerfile and docker-compose.yml
-  4. Entry points (main.ts, main.go, app.py, index.tsx, etc.)
+**Reading priority — stop as soon as the stack is clear:**
+1. Package manifest (package.json, pyproject.toml, go.mod, Cargo.toml, Gemfile) — this alone usually identifies the stack
+2. Existing Dockerfile and docker-compose.yml if present
+3. One entry point (main.ts, app.py, index.tsx, main.go, etc.) only if the manifest is ambiguous
+4. README.md only if intent is still unclear after the above
+
+**Hard stops — never read these:**
+- `node_modules/`, `.venv/`, `venv/`, `target/`, `vendor/`, `dist/`, `build/`
+- `agent/` and anything inside it
+- Test files (`*.test.*`, `*_test.*`, `tests/`, `spec/`) — you don't need them to scaffold config
+- Lock files beyond confirming package manager (bun.lock, uv.lock, package-lock.json)
+- Any file not in the reading priority list above
+
+Once you have identified runtime, package manager, and framework — stop exploring. You have enough.
 
 ## Step 2 — resolve stack with context7
-With exact versions known, fetch docs for major dependencies.
+With exact versions known, fetch docs for the primary framework only.
+Do not fetch docs for every dependency — only those with version-sensitive config.
 
 ## Step 3 — generate files
 
@@ -138,10 +155,10 @@ If everything follows standard conventions, omit this section entirely.
   ## Permissions
   ### Allowed without asking
   - All project files (outside agent/)
-  
+
   ### Ask first
   - Modify agent/ directory (MultiTUI framework - see @agent/AGENTS.md)
-  
+
   ### Never do
   - Commit changes to agent/ submodule
   - Read .env files
@@ -153,11 +170,18 @@ List every library ID you resolved during this session so future sessions can sk
   - [library name]: [/org/repo-id]
   ...
 
-### 6. .gitignore / .dockerignore
-Check for existing .gitignore / .dockerfile first. If missing or incomplete, generate one that covers:
+### Dockerfile
+Only generate a Dockerfile if one does not already exist.
+If a Dockerfile is present, leave it untouched — bootstrap never overwrites an existing Dockerfile.
+
+### docker-compose.yml
+Generate unless one already exists.
+
+### .gitignore / .dockerignore
+Check for existing .gitignore / .dockerignore first. If missing or incomplete, generate one that covers:
 - agent/ directory
 - Language-specific artifacts (node_modules/, __pycache__/, target/, etc.)
-- Package manager caches (bun.lockb if using text lock, .uv/, etc.)
+- Package manager caches (.uv/, etc.)
 - Build outputs (dist/, build/, *.egg-info/)
 - Environment files (.env, .env.local, .env.*.local)
 - IDE/editor files (.idea/, .vscode/, *.swp, *.swo)
