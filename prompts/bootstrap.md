@@ -18,7 +18,7 @@ NO language runtimes exist here. ALL code execution uses DooD (Docker-out-of-Doc
 Apply these precisely for known stacks, or follow their spirit for others:
 
 ### JavaScript/TypeScript
-- Package manager: bun. Check for bun.lock to confirm.
+- Package manager: bun - adjust if needed
 - Base image: imbios/bun-node:latest-slim
 - HMR: add server.watch.usePolling=true to vite.config if not present
 - Cache volume: bun_cache → /root/.bun/install/cache
@@ -172,11 +172,10 @@ List every library ID you resolved during this session so future sessions can sk
   ...
 
 ### Dockerfile
-Only generate a Dockerfile if one does not already exist.
-If a Dockerfile is present, leave it untouched — bootstrap never overwrites an existing Dockerfile.
+Edit / modify as needed for making the project run
 
 ### docker-compose.yml
-Generate unless one already exists.
+Edit / modify as needed for making the project run
 
 ### .gitignore / .dockerignore
 Check for existing .gitignore / .dockerignore first. If missing or incomplete, generate one that covers:

@@ -60,7 +60,17 @@ RUN hash -r
 
 # OpenCode configuration
 ENV OPENCODE_CONFIG_DIR=/workspace/.opencode \
+    OPENCODE_DATA_DIR=/workspace/.opencode-data \
+    OPENCODE_CACHE_DIR=/workspace/.opencode-cache \
+    OPENCODE_STATE_DIR=/workspace/.opencode-state \
+    OPENCODE_LOG_DIR=/workspace/.opencode-log \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
+# Create writable OpenCode runtime directories
+RUN mkdir -p /workspace/.opencode-data /workspace/.opencode-cache /workspace/.opencode-state /workspace/.opencode-log && \
+    chown -R dev:dev /workspace/.opencode* && \
+    chmod 700 /workspace/.opencode-data /workspace/.opencode-state && \
+    chmod 755 /workspace/.opencode-cache /workspace/.opencode-log
 
 USER root
 RUN rm -rf /tmp/* /var/cache/apk/* /home/dev/.cache /root/.local /root/.config /root/.npm
