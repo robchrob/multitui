@@ -1,41 +1,62 @@
 # Changelog
 
-## v0.3.6 — 2026-04-07 [PATCH]
+## v0.2.0 — 2026-04-07 [MINOR]
 ### Added
-- Quota management plugin (@slkiser/opencode-quota) for token/budget tracking
-- Rate limit and retry plugin (@bdliyq/opencode-rate-limit-retry) for API resilience
-- Reusable e2e test helper libraries (docker, fixtures, mtui, opencode, test_helpers)
-- Isolated development with project branches (branch create/status/update commands)
+- Magic versioning protocol with narrative-first planning
+
+### Changed (Breaking)
+- Replace hardcoded "develop" with dynamic branch base via MTUI_BRANCH
+
+### Fixed
+- Remove dead code and streamline status output
+
+### Documentation
+- Populate magic versioning documents with historical data
+- Overhaul README with structured feature and plugin documentation
+
+## v0.1.9 — 2026-04-07 [MINOR]
+### Added
+- Quota management plugin (@slkiser/opencode-quota)
+- Rate limit and retry plugin (@bdliyq/opencode-rate-limit-retry)
 - Session contract and semver 2.0 to magic versioning skill
+
+## v0.1.8 — 2026-04-06 [MINOR]
+### Added
+- Isolated development with project branches (branch create/status/update commands)
+- Runtime isolation with dedicated writable directories under /workspace
+- Autonomous execution rules and safety checks (SYSTEM DIRECTIVE)
 
 ### Changed
 - Switch default model to stepfun/step-3.5-flash:free
-- Isolate opencode state with dedicated writable directories under /workspace
-- Parameterize model config via {env:MTUI_MODEL} in opencode.json
 - Simplify Dockerfile lookup to check project root directly
 - Enhance README with workflow documentation and mtui configurability
-- Add autonomous execution rules and safety checks to rewrite-history command
-- Improve prompts for precise project discovery and testing
-- Reorganize README structure and clarify user capabilities in prompts
+
+## v0.1.7 — 2026-04-06 [MINOR]
+### Added
+- Batch commit message rewriting command
+- SHA-based file mapping for scalability
+
+### Changed
+- Enhance update-readme with diff audit for accurate docs
+
+## v0.1.6 — 2026-04-06 [MINOR]
+### Added
+- Update-readme command with diff audit
+- Caveman skill for ultra-compressed communication
+- License file (MIT)
+- README auto-update capability
+- Reusable e2e test helper libraries
+
+### Changed
+- Reorganize README and clarify user capabilities in prompts
 - Overhaul MCP documentation and restructure README
 
 ### Fixed
 - Clarify when to read AGENTS_DEV.md vs AGENTS.md
-- Add temporal context (year 2026) to init and bootstrap prompts
-- Revert model to minimax and increase container wait time for test stability
-- Remove stale GitHub MCP configuration causing failures
+- Add temporal context (year 2026) to prompts
+- Improve prompts for precise project discovery and testing
 
-## v0.3.5 — 2026-04-06 [PATCH]
-### Added
-- Update-readme command with diff audit for accurate documentation
-- Caveman skill for ultra-compressed communication
-- License file (MIT)
-- README overhaul with auto-update capability
-
-### Fixed
-- Clarify DEVMODE execution rules in AGENTS.md
-
-## v0.3.4 — 2026-04-05 [PATCH]
+## v0.1.5 — 2026-04-05 [MINOR]
 ### Added
 - Comprehensive e2e test harness for mtui CLI
 - Shared assertion library for test consolidation
@@ -44,9 +65,8 @@
 
 ### Changed
 - Rewrite AGENTS_DEV.md as comprehensive development guide
-- Streamline test suites with shared utilities
 
-## v0.3.3 — 2026-04-05 [PATCH]
+## v0.1.4 — 2026-04-05 [PATCH]
 ### Added
 - Multiple concurrent sessions support via background container
 
@@ -55,74 +75,74 @@
 - Correct config paths and support non-interactive stdin in docker-exec
 - Return to PWD-based volume mounts for path resolution
 
-## v0.3.2 — 2026-04-05 [PATCH]
-### Added
-- Structured 6-section agents.md template
-- Comprehensive ignore file generation instructions
-- Mount user package manager configurations into container
-
-### Changed
-- Reorganize config and prompt directories for clarity
-- Separate MCP server configs for easier maintenance (then reverted to inline)
-- Upgrade default model to qwen3.6-plus-free
-
-### Fixed
-- Create .config directory before mounting user configs
-- Handle array expansion and command failures in strict mode
-- Document dev user and fix cross-file path references
-- Use symlinks for skills and ensure .opencode/ is ignored
-
-## v0.3.1 — 2026-04-05 [PATCH]
-### Fixed
-- Resolve issues introduced by strict error handling
-- Simplify opencode invocation by removing temp file indirection
-- Simplify attach with shallow clone approach
-- Track correct upstream branch (develop)
-
-## v0.3.0 — 2026-04-05 [MINOR]
+## v0.1.3 — 2026-04-05 [MINOR]
 ### Added
 - OpenCode version checking and auto-rebuild on build
 - Broken gitlink detection and recovery in attach command
-- Bash version check and port argument validation
 
 ### Changed
 - Implement robust error handling with strict mode
-- Simplify with shallow clone approach for attach
-- Update docs and status for cloned agent model
 - Consolidate docker flags and prioritize agent Dockerfile
+- Simplify opencode invocation by removing temp file indirection
+- Simplify attach with shallow clone approach
+- Update docs and status for cloned agent model
 
-## v0.2.2 — 2026-04-05 [PATCH]
+### Fixed
+- Resolve issues introduced by strict error handling
+- Add bash version check and port argument validation
+- Track correct upstream branch (develop)
+
+## v0.1.2 — 2026-04-05 [PATCH]
+### Added
+- Initialize multitui framework project structure
+- Structured 6-section agents.md template
+- Comprehensive ignore file generation instructions
+
+### Changed
+- Reorganize config and prompt directories for clarity
+- Separate MCP server configs for easier maintenance
+- Upgrade default model to qwen3.6-plus-free
+
+### Fixed
+- Use symlinks for skills and ensure .opencode/ is ignored
+- Simplify permissions model and add environment context
+- Document dev user and fix cross-file path references
+- Mount user package manager configurations into container
+- Create .config directory before mounting user configs
+- Handle array expansion and command failures in strict mode
+
+## v0.1.1 — 2026-04-05 [PATCH]
 ### Changed
 - Prioritize project-specific commands from agents.md
 - Simplify templates and consolidate mtui logic
-
-## v0.2.1 — 2026-04-05 [PATCH]
-### Added
-- Initialize multitui framework project structure
-
-### Changed
-- Remove delegation pattern and consolidate helpers
+- Create standalone mtui script with external templates
 - Consolidate shell functions into standalone mtui script
+- Remove delegation pattern and consolidate helpers
 
-## v0.2.0 — 2026-04-05 [MINOR]
+## v0.1.0 — 2026-04-05 [MINOR]
 ### Added
 - Standalone mtui CLI script with external templates
 - Custom user instructions support during bootstrap initialization
 - Agent integration tracking in TODO
 
-### Changed
-- Remove dead code and unused variables from scripts
+### Fixed
 - Document Docker container execution model in AGENTS.md
+- Remove dead code and unused variables from scripts
 
-## v0.1.1 — 2026-04-05 [PATCH]
+## v0.0.3 — 2026-04-05 [PATCH]
 ### Fixed
 - Include OpenCode binary directory in PATH in Dockerfile
 - Ensure configured model is passed to all invocations
+- Update default model and improve test output management
 
-## v0.1.0 — 2026-04-05 [MINOR]
+## v0.0.2 — 2026-04-04 [PATCH]
 ### Added
-- Initial command templates and skill definitions
 - Configurable default model for OpenCode
 
+## v0.0.1 — 2026-04-04 [MINOR]
 ### Changed (Breaking)
 - Migrate from Anthropic to OpenRouter as model gateway
+
+## v0.0.0 — 2026-04-04 [MINOR]
+### Added
+- Initial command templates and skill definitions
