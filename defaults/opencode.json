@@ -93,7 +93,10 @@
     "external_directory": "deny",
     "*": "allow"
   },
-  "plugin": ["@slkiser/opencode-quota"],
+  "plugin": [
+      "@slkiser/opencode-quota",
+      "@bdliyq/opencode-rate-limit-retry@latest"
+   ],
   "mcp": {
     "memory": {
       "type": "local",
