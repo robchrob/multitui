@@ -2,9 +2,26 @@
 
 ```
 SESSION_CURRENT = 0.3.6
-SESSION_TARGET  = 0.3.6
-SESSION_SCOPE   = Full framework: from initial scaffolding through CLI, build system, testing, branch management, runtime isolation, and plugin ecosystem
+SESSION_TARGET  = 0.3.8
+SESSION_SCOPE   = read TODO file
 ```
+
+## v0.3.8 — Remove Submodule Logic
+**Goal:** Drop all submodule-related code from mtui since the framework uses cloning
+
+### Submodule Cleanup
+- [ ] Identify and remove all submodule logic from mtui script
+- [ ] Remove any submodule-related documentation or references
+- [ ] Verify mtui works correctly without submodule code paths
+
+## v0.3.7 — Dynamic Branch Base
+**Goal:** Use MTUI_BRANCH env var as the branching base instead of hardcoded "develop"
+
+### Branch Base Configuration
+- [ ] Read MTUI_BRANCH for determining base branch (instead of hardcoded "develop")
+- [ ] Update branch create command to use dynamic base
+- [ ] Update documentation to reflect MTUI_BRANCH dual purpose
+- [ ] Test branching from non-develop base branches
 
 ## v0.3.6 — Polish, Isolation & Ecosystem
 **Goal:** Agent improvements, branch management, runtime isolation, plugin ecosystem, and magic versioning session contract

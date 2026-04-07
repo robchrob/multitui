@@ -43,7 +43,7 @@ Prefix with `magic` (e.g., `magic init`, `magic status`) — this is a command i
 
 - `adjust` — Modify plan.md and tasks.md within the session scope: add subtasks, edit estimates, move tasks between versions, or defer items to a future version beyond SESSION_TARGET (marking them `[>]`). Cannot change SESSION_CURRENT or SESSION_TARGET themselves — those require `--reset`.
 
-- `release` — Validate that all tasks for the **active version** are `[x]` or `[>]`. Fails and lists every blocking item if any are `[ ]`, `[~]`, or `[!]`. On success: append an entry to changelog.md → clear that version from tasks.md → clear it from plan.md → advance the internal pointer to the next version in the session. When SESSION_TARGET is the version just released, the session closes.
+- `release` — Validate that all tasks for the **active version** are `[x]` or `[>]`. Fails and lists every blocking item if any are `[ ]`, `[~]`, or `[!]`. On success: append an entry to changelog.md → mark done tasks.md → mark done plan.md → advance the internal pointer to the next version in the session. When SESSION_TARGET is the version just released, the session closes.
 
 ---
 
