@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.8 — 2026-04-07 [MINOR]
+### Changed (Breaking)
+- Removed all submodule logic from `_attach()` (`.git/modules/agent` cleanup, `git config --remove-section submodule.agent`)
+- Updated prompt templates to reference `agent/ directory` instead of `agent/ submodule`
+
+## v0.3.7 — 2026-04-07 [MINOR]
+### Added
+- Dynamic branch base: `MTUI_BRANCH` env var now controls the base branch for `branch create` instead of hardcoded "develop"
+- Branch naming uses `$REMOTE_BRANCH` prefix (e.g., `custom-base-projectname`)
+
+### Changed
+- All log messages and help text reference `$REMOTE_BRANCH` instead of hardcoded "develop"
+- `branch create` prefix derived from `$REMOTE_BRANCH` instead of literal "develop"
+
 ## v0.3.6 — 2026-04-07 [PATCH]
 ### Added
 - Quota management plugin (@slkiser/opencode-quota) for token/budget tracking
