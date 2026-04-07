@@ -143,7 +143,7 @@ If everything follows standard framework conventions, omit this section entirely
   - Modify agent/ directory (MultiTUI framework - see @agent/AGENTS.md)
 
   ### Never do
-  - Commit changes to agent/ submodule
+  - Commit changes to agent/ directory
   - Read .env files
 
 #### 6. context7 IDs

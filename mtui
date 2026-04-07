@@ -88,13 +88,12 @@ _attach() {
 
     if [[ "$agent_ok" -ne 1 ]]; then
         _log "Agent missing or broken, re-cloning branch: $branch..."
-        rm -rf agent .git/modules/agent
-        git config --remove-section submodule.agent >/dev/null 2>&1 || true
+        rm -rf agent
 
         # Try to clone the specified branch, fall back to default branch if it doesn't exist
         if ! git clone --depth 1 -b "$branch" "$REMOTE_REPO" agent 2>/dev/null; then
             git clone --depth 1 "$REMOTE_REPO" agent
-            if [[ "$branch" != "develop" ]]; then
+            if [[ "$branch" != "$REMOTE_BRANCH" ]]; then
                 git -C agent checkout -q "$branch" 2>/dev/null || true
             fi
         fi
@@ -440,21 +439,21 @@ cmd_status() {
 cmd_branch_create() {
     local branch_name
     branch_name="$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')"
-    branch_name="develop-${branch_name}"
+    branch_name="${REMOTE_BRANCH}-${branch_name}"
 
     _log "Creating project branch: $branch_name..."
 
     if [[ ! -d "agent" ]]; then
-        _log "Attaching agent (develop) first..."
+        _log "Attaching agent ($REMOTE_BRANCH) first..."
         _attach
     fi
 
     local current_branch
     current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null)"
 
-    # If not on develop, switch to develop first
+    # If not on base branch, switch to base branch first
     if [[ "$current_branch" != "$REMOTE_BRANCH" ]]; then
-        _log "Switching from $current_branch to develop..."
+        _log "Switching from $current_branch to $REMOTE_BRANCH..."
         git -C agent fetch origin -q 2>/dev/null || true
         git -C agent checkout -q "$REMOTE_BRANCH" 2>/dev/null || \
             git -C agent checkout -b "$REMOTE_BRANCH" origin/"$REMOTE_BRANCH" -q 2>/dev/null || true
@@ -488,7 +487,7 @@ cmd_branch_create() {
     fi
 
     echo -e "${C_GREEN}[✔] Branch $branch_name created and tracked.${C_RESET}"
-    _log "Run 'mtui update' to sync with develop"
+    _log "Run 'mtui update' to sync with $REMOTE_BRANCH"
 }
 
 cmd_branch_status() {
@@ -510,11 +509,11 @@ cmd_branch_status() {
 
             echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch"
             echo -e "${C_BOLD}Base branch:${C_RESET}    $REMOTE_BRANCH"
-            echo -e "${C_BOLD}Ahead of develop:${C_RESET} $ahead commits"
-            echo -e "${C_BOLD}Behind develop:${C_RESET} $behind commits"
+            echo -e "${C_BOLD}Ahead of $REMOTE_BRANCH:${C_RESET} $ahead commits"
+            echo -e "${C_BOLD}Behind $REMOTE_BRANCH:${C_RESET} $behind commits"
         else
             echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch (tracking $REMOTE_BRANCH)"
-            echo -e "${C_BOLD}Status:${C_RESET} Up to date with develop"
+            echo -e "${C_BOLD}Status:${C_RESET} Up to date with $REMOTE_BRANCH"
         fi
 
         local last_fetch
@@ -547,7 +546,7 @@ cmd_update() {
     _log "Updating $branch from $REMOTE_BRANCH..."
 
     git -C agent fetch origin -q || _err "Failed to fetch from origin"
-    git -C agent fetch origin "$REMOTE_BRANCH" -q || _err "Failed to fetch develop"
+    git -C agent fetch origin "$REMOTE_BRANCH" -q || _err "Failed to fetch $REMOTE_BRANCH"
     git -C agent fetch origin "$branch" -q || true
 
     local current_branch
@@ -558,7 +557,7 @@ cmd_update() {
 
     if git -C agent rebase "origin/$REMOTE_BRANCH" 2>&1; then
         git -C agent push -f origin "$branch" 2>/dev/null || _warn "Could not push (may not have permission)"
-        echo -e "${C_GREEN}[✔] Updated $branch to latest develop.${C_RESET}"
+        echo -e "${C_GREEN}[✔] Updated $branch to latest $REMOTE_BRANCH.${C_RESET}"
     else
         _warn "Rebase conflicts detected in agent/"
         _log "Resolve conflicts in agent/, then run 'mtui update --continue'"
@@ -586,8 +585,8 @@ show_help() {
     echo ""
     echo -e "${C_BOLD}Branch Commands:${C_RESET}"
     echo "  branch create             Create and track a project-specific branch"
-    echo "  branch status             Show branch info and divergence from develop"
-    echo "  update [--continue]      Rebase project branch onto latest develop"
+    echo "  branch status             Show branch info and divergence from $REMOTE_BRANCH"
+    echo "  update [--continue]      Rebase project branch onto latest $REMOTE_BRANCH"
     echo ""
     echo -e "${C_DIM}Run 'mtui <command> --help' for more info on a command.${C_RESET}"
 }
