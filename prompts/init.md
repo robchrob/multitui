@@ -11,8 +11,12 @@ The only pre-existing files may be the fixture stubs created by the test harness
 
 ## Step 0 — Decide intent
 From the project name and user instruction only, determine:
-- Language: JavaScript/TypeScript, Python, or Other
-- Framework and purpose: API, webapp, CLI tool, etc.
+- Language: JavaScript/TypeScript, Python, or Other (Go, Rust, Ruby, PHP, Shell, C/C++, etc.)
+- Framework and purpose: API, webapp, CLI tool, library, daemon, etc.
+- For Other stacks: What is the primary executable pattern?
+  - CLI tool → single binary/script execution
+  - Library → build as module for import
+  - Daemon/service → long-running process with healthchecks
 - Use exa search / context7 for version-specific docs on the chosen stack
 
 ## Your execution environment
@@ -47,8 +51,57 @@ Apply these precisely for known stacks, or follow their spirit for others:
 - Dev commands: uv run script / uv run pytest / uv sync
 - Named cache volume: uv_cache → /root/.cache/uv
 
-### Other stacks (Go, Rust, Ruby, PHP, Elixir, etc.)
-Be flexible. Apply DooD best practices:
+### Other stacks (Go, Rust, Ruby, PHP, Elixir, CLI tools, Shell, C/C++, etc.)
+Be flexible. Apply DooD best practices based on language:
+
+#### Go projects
+- Package manager: go mod
+- Base image: golang:1.23-alpine (or -slim for smaller images)
+- No COPY in Dockerfile — volume mounted during dev
+- WORKDIR /app
+- Named cache volume: go_mod_cache → /go/pkg/mod
+- Build: CGO_ENABLED=0 for static binaries
+- Multi-stage build recommended for final binaries
+
+#### Rust projects
+- Package manager: cargo
+- Base image: rust:1.82-alpine
+- No COPY in Dockerfile (volume mounted)
+- WORKDIR /app
+- Named cache volume: cargo_registry → /usr/local/cargo/registry
+- Build: cargo build --release for production
+- Consider rustls over openssl to avoid system deps
+
+#### Ruby projects
+- Package manager: bundler (gem for system gems)
+- Base image: ruby:3.3-alpine
+- WORKDIR /app
+- Named cache volume: gem_cache → /usr/local/bundle
+- Install deps: bundle install
+- Run: bundle exec [command]
+
+#### PHP projects
+- Package manager: composer
+- Base image: php:8.4-cli-alpine
+- WORKDIR /app
+- Named cache volume: composer_cache → /usr/local/cache/composer
+- Extensions: install via docker-php-ext-install if needed
+
+#### Shell/CLI tools (POSIX sh, bash scripts)
+- Base image: alpine:latest (for pure scripts) or debian:stable-slim
+- Install dependencies: apk add / apt-get install
+- WORKDIR /app
+- Mark scripts executable: chmod +x
+- Build: shellcheck for linting (if available)
+- Pure shell avoids runtime entirely
+
+#### C/C++ projects
+- Base image: gcc:latest or clang:latest (or alpine variants)
+- Build system: cmake, make, meson
+- Named cache volume: cc_cache → /root/.ccache
+- Multi-stage build: build in builder stage, copy binary to runtime
+
+#### General DooD rules for Other stacks
 - Use appropriate slim or alpine base image for the language
 - Use native package manager (go mod, cargo, gem, composer, mix, etc.)
 - WORKDIR /app, no COPY in Dockerfile (volume-mounted during dev)
@@ -170,7 +223,7 @@ List every library ID you resolved during this session so future sessions can sk
 Generate a comprehensive .gitignore / .dockerignore for the detected stack covering:
 - agent/ directory
 - Language artifacts (node_modules/, __pycache__/, target/, vendor/, etc.)
-- Package manager files (bun.lockb if using text lockfile, .uv/, go.sum if vendored)
+- Package manager files (bun.lock if using text lockfile, .uv/, go.sum if vendored)
 - Build outputs (dist/, build/, *.egg-info/, bin/)
 - Environment files (.env, .env.local, .env.*.local, !.env.example)
 - IDE/editor files (.idea/, .vscode/, *.swp, *.swo, *~)
