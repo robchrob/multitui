@@ -7,9 +7,9 @@ description: Manage projects with plan.md (roadmap), tasks.md (active work), cha
 Synchronize three documents for milestone-based project management using Semantic Versioning 2.0.0 in perpetual 0.x mode.
 
 ## Documents
-**plan.md** — Very detailed and in-depth version roadmap with implementation specifics
-**tasks.md** — Task tracker with progress markers for all versions
-**changelog.md** — Completed releases (append-only)
+**plan.md** — Very detailed and in-depth version roadmap with implementation specifics (newest version first)
+**tasks.md** — Task tracker with progress markers for all versions (newest version first)
+**changelog.md** — Completed releases (append-only, newest first)
 
 ---
 
