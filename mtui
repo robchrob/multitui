@@ -1,13 +1,5 @@
 #!/bin/bash
 # MultiTUI — Global CLI Orchestrator
-# --- CRITICAL: Bash Version Check (namerefs require 4.3+) ---
-if [[ "${BASH_VERSINFO[0]}" -lt 4 ]] || [[ "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -lt 3 ]]; then
-    echo -e "\033[0;31m[✘] Error: This script requires Bash 4.3 or higher for nameref support.\033[0m" >&2
-    echo -e "\033[0;33m[!] You are running Bash ${BASH_VERSION:-unknown}\033[0m" >&2
-    echo -e "\033[0;33m[!] On macOS, install newer Bash: brew install bash\033[0m" >&2
-    exit 1
-fi
-
 set -Eeuo pipefail
 shopt -s nullglob
 
@@ -15,8 +7,6 @@ MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
 REMOTE_BRANCH="${MTUI_BRANCH:-develop}"
 OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-openrouter/stepfun/step-3.5-flash:free}"
-#OPENCODE_DEFAULT_MODEL="openrouter/opencode/minimax-m2.5-free"
-#OPENCODE_DEFAULT_MODEL="openrouter/qwen/qwen3.6-plus:free"
 
 # --- Colors & Helpers ---
 C_RESET='\033[0m'
@@ -423,7 +413,7 @@ cmd_status() {
         agent_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
 
         if [[ -f ".mtui-branch" ]]; then
-            echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch, project branch)"
+            echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch, tracking in .mtui-branch)"
         else
             echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch)"
         fi
@@ -434,10 +424,6 @@ cmd_status() {
     [[ -f ".mtui-branch" ]] && \
         echo -e "${C_BOLD}Project Branch:${C_RESET}    $(cat .mtui-branch)" || \
         echo -e "${C_BOLD}Project Branch:${C_RESET}    $REMOTE_BRANCH (default)"
-
-    [[ -f "AGENTS.md" ]] && \
-        echo -e "${C_BOLD}AGENTS.md:${C_RESET}          ${C_GREEN}Found${C_RESET}" || \
-        echo -e "${C_BOLD}AGENTS.md:${C_RESET}          ${C_YELLOW}Missing${C_RESET}"
 
     local c_state
     c_state="$(docker inspect -f '{{.State.Status}}' "$(_container_name)" 2>/dev/null || echo 'Not Created')"
@@ -602,13 +588,6 @@ show_help() {
     echo "  branch create             Create and track a project-specific branch"
     echo "  branch status             Show branch info and divergence from develop"
     echo "  update [--continue]      Rebase project branch onto latest develop"
-    echo ""
-    echo -e "${C_BOLD}Session Tips:${C_RESET}"
-    echo "  Container runs in background - stays alive until 'mtui clean'"
-    echo "  mtui start → attach to running container, start OpenCode"
-    echo "  Ctrl+C / exit → detach from session, container keeps running"
-    echo "  Multiple terminals can each run 'mtui start' for parallel sessions"
-    echo "  mtui clean → stop container, start fresh next time"
     echo ""
     echo -e "${C_DIM}Run 'mtui <command> --help' for more info on a command.${C_RESET}"
 }
