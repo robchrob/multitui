@@ -64,7 +64,116 @@ Prefix with `magic` (e.g., `magic init`, `magic status`) — this is a command i
 
 - `adjust` — Modify plan.md and tasks.md within the session scope: add rationale, update design decisions, add subtasks, edit estimates, move tasks between versions, or defer items to a future version beyond SESSION_TARGET (marking them `[>]`). Cannot change SESSION_CURRENT or SESSION_TARGET themselves — those require `--reset`. When adding tasks, always update plan.md narrative first, then derive the tasks.md entry.
 
-- `release` — Validate that all tasks for the **active version** are `[x]` or `[>]`. Fails and lists every blocking item if any are `[ ]`, `[~]`, or `[!]`. On success: append an entry to changelog.md → mark done tasks.md → mark done plan.md → advance the internal pointer to the next version in the session. When SESSION_TARGET is the version just released, the session closes.
+- `release <version>` — Normal flow: validate that all tasks for the **active version** are `[x]` or `[>]`. Fails and lists every blocking item if any are `[ ]`, `[~]`, or `[!]`. On success: append an entry to changelog.md → mark done tasks.md → mark done plan.md → **create git tag v<version>** → close session if SESSION_TARGET reached.
+
+- `release <version> --infer` — Retroactive inference: use when work was done outside the normal magic versioning workflow (no init/start/tasks). See **Retroactive Inference** section below for the full algorithm.
+
+---
+
+## Retroactive Inference
+
+Use `magic release <version> --infer` when work was done on the repo without following the normal magic versioning workflow (no `init`, no `start`, no task tracking). The system infers plan.md and tasks.md entries from git history, then proceeds with release.
+
+### When to use
+
+- You committed code without using `magic init` / `magic start`
+- plan.md and tasks.md are missing or stale
+- You want to "catch up" the paperwork to reflect what's already done
+
+### The Algorithm (8 phases)
+
+```
+magic release <version> --infer
+```
+
+#### Phase 1: Read State
+
+1. **Read git tags**: `git tag -l --sort=-v:refname` → sorted list
+2. **Determine latest released version**: highest semver tag (e.g., v0.2.0)
+   - If no tags exist → use root commit as boundary
+3. **Read changelog.md**: get the last entry's version (for backfill detection)
+4. **Read plan.md + tasks.md**: note existing version entries and session header
+5. **Sanity check**: Does latest_tag version == last_changelog version?
+   - MATCH → consistent
+   - TAG AHEAD → use tag, note missing changelog entry
+   - CHANGELOG AHEAD → use changelog, warn about missing tag
+
+#### Phase 2: Determine Git Range
+
+1. **since_ref** = latest tag (e.g., v0.2.0) or root commit if no tags
+2. **commits** = `git log <since_ref>..HEAD --format="%h|%s|%b---COMMIT_END---"`
+3. If no commits in range → FAIL: "No commits since v0.X.Y. Nothing to release."
+
+#### Phase 3: Parse Commits
+
+For each commit in the range:
+- Extract: hash, type (feat/fix/chore/docs/refactor), scope, subject, body
+- Conventional commit prefixes → type classification
+- Non-prefixed commits → classify as "Changed"
+
+#### Phase 4: Check — Is Inference Needed?
+
+Does `<version>` already have entries in plan.md AND tasks.md?
+- YES → skip to Phase 7 (only need changelog + tag)
+- NO → continue to Phase 5
+
+#### Phase 5: Infer Plan + Tasks (Fill Gaps Only)
+
+**Generate plan.md entry** for `<version>`:
+- **Goal**: Synthesized from commit subjects (1-2 sentences)
+- **Motivation**: Extracted from commit bodies (the "why")
+- **Approach**: Inferred from the nature of changes (scope + types)
+- **Tradeoffs**: Extracted from bodies where present; omitted if not available (conservative)
+- **Definition of Done**: "All commits in this version merged to main" (factual)
+- **Tasks**: One `[x]` task per logical commit (group micro-commits)
+
+**Generate tasks.md entry** for `<version>`:
+- Flat `[x]` checkbox list derived from plan.md tasks
+- All items marked done since work is complete
+
+**Append** to plan.md and tasks.md (preserve existing, fill gaps only):
+- Insert version entry in correct version-ordered position
+- If files don't exist → create with header + entry
+
+#### Phase 6: Update Session Header
+
+Set in both plan.md and tasks.md:
+- `SESSION_CURRENT = <version>` (since it's being released)
+- `SESSION_TARGET = <version>` (session closes)
+- `SESSION_SCOPE = "Retroactive: inferred from git history"`
+
+#### Phase 7: Generate Changelog
+
+1. **Categorize commits** into changelog sections:
+   - `feat` → "Added"
+   - `fix` → "Fixed"
+   - `refactor` → "Changed"
+   - `docs` → "Documentation"
+   - `chore` → omit (internal)
+   - Any type with `!` → "Changed (Breaking)"
+
+2. **Classify bump type**:
+   - Any `feat` or breaking change → [MINOR]
+   - Only `fix` → [PATCH]
+
+3. **Backfill missing entry** if tag exists but no changelog entry
+
+4. **Prepend** entry to changelog.md (newest first)
+
+#### Phase 8: Tag
+
+`git tag -a v<version> -m "Release v<version>"`
+
+Session closes. Release complete.
+
+### Tag / Changelog Conflict Resolution
+
+| Scenario | Resolution |
+|----------|------------|
+| Tag exists, no matching changelog | Backfill changelog entry, proceed with release |
+| Changelog entry exists, no tag | Warn, proceed (tag will be created) |
+| Both exist, consistent | Proceed normally |
+| Tag v<version> already exists | FAIL — releases are immutable |
 
 ---
 
@@ -76,6 +185,10 @@ Prefix with `magic` (e.g., `magic init`, `magic status`) — this is a command i
 | `release` with any `[ ]`, `[~]`, or `[!]` tasks remaining | Refuse. List every blocking item explicitly. |
 | Context lost / fresh conversation | Re-derive session from the header block in plan.md + tasks.md before executing any command. Never proceed without confirming the session scope. |
 | plan.md looks like a second tasks.md (no prose, only checkboxes) | This is a protocol violation. plan.md must have narrative sections. Rewrite before proceeding. |
+| `release <version>` with stale plan.md/tasks.md | Refuse. Show which versions are missing. Suggest `--infer` flag. |
+| `release <version> --infer` with no commits since last release | Refuse. "No commits found since v0.X.Y. Nothing to release." |
+| `release <version> --infer` but v<version> already tagged | Refuse. "v0.X.Y already tagged. Releases are immutable — create a new version instead." |
+| Changelog entry exists but no matching git tag | Warn about untagged release, proceed with release (tag will be created) |
 
 ---
 
@@ -118,6 +231,28 @@ Use for versions in active development not yet ready for release:
 Precedence (low → high): `alpha < alpha.1 < beta < rc.1 < release`
 
 Once released, a version's contents are **immutable** — any change requires a new version number.
+
+---
+
+## Git Tags
+
+Tags are the ground truth of what has been released. Every successful release **must** produce an annotated git tag as the final step.
+
+### Rules
+
+- **Tag format**: v<version> (e.g., v0.3.0, v0.2.1)
+- **Always annotated**: `git tag -a v<version> -m "Release v<version>"`
+- **Tag is the final step**: changelog is written first, tag is created last — never the other way around
+- **Existing tags are immutable**: never move, delete, or amend a tag
+- **Tags take precedence over changelog**: when determining the last released version, prefer git tags as the source of truth. If a tag exists but changelog doesn't have the entry, backfill the changelog.
+
+### Tag / Changelog Consistency
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Tag exists, changelog has matching entry | Consistent — proceed normally |
+| Tag exists, no matching changelog entry | Use tag as truth, backfill changelog entry, warn |
+| Changelog entry exists, no tag | Use changelog as truth, warn about missing tag |
 
 ---
 
@@ -206,3 +341,6 @@ Implement a new `/export` route behind the existing auth middleware. Use streami
 - Pre-release suffixes signal in-progress work; drop them on stable release
 - Release when all planned versions within the session are complete
 - **The session is the unit of work** — init opens it, release closes it, everything else operates inside it
+- **Tags are the final step of every release** — changelog first, then tag. Tags are the ground truth.
+- **Retroactive inference is an escape hatch**, not the primary workflow. If `--infer` is used frequently, adopt the normal init/start/release flow instead.
+- **Inferred narratives are only as good as commit messages** — sparse commits produce thin plans. Write meaningful commit messages to get useful inferred documentation.
