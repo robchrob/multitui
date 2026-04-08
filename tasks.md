@@ -1,10 +1,18 @@
 # Tasks.md — MultiTUI Task Tracker
 
 ```
-SESSION_CURRENT = 0.2.0
-SESSION_TARGET  = 0.2.0
+SESSION_CURRENT = 0.2.1
+SESSION_TARGET  = 0.2.1
 SESSION_SCOPE   = Retroactive: inferred from git history
 ```
+
+## v0.2.1 — Command & Skill Enhancements
+- [x] Add fix-commit-msg.md command for commit message auditing
+- [x] Update magic versioning skill for manual workflow
+- [x] Generalize prompts for generic project discovery
+- [x] Update model provider configuration
+- [x] Remove unused MCP server configurations
+- [x] Add version tracking and bash completion
 
 ## v0.2.0 — Magic Versioning Protocol
 - [x] Redefine magic versioning protocol with narrative-first planning

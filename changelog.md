@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1 — 2026-04-08 [MINOR]
+### Added
+- New fix-commit-msg.md command for auditing and fixing commit messages to comply with Conventional Commits
+- Update magic versioning skill to support manual workflow where git tags serve as source of truth
+
+### Fixed
+- Generalized prompts for generic project discovery (was overly tuned for JS/Python stacks)
+
 ## v0.2.0 — 2026-04-07 [MINOR]
 ### Added
 - Magic versioning protocol with narrative-first planning

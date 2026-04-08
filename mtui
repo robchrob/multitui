@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 shopt -s nullglob
 
+MTUI_VERSION="0.2.1"
 MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
 REMOTE_BRANCH="${MTUI_BRANCH:-develop}"
@@ -195,16 +196,25 @@ cmd_setup() {
     local mtui_link="$HOME/.local/bin/mtui"
     mkdir -p "$HOME/.local/bin"
 
-    local mtui_source
     if [[ -f "$PWD/mtui" ]]; then
-        mtui_source="$PWD/mtui"
-    else
-        mtui_source="https://raw.githubusercontent.com/robchrob/multitui/$REMOTE_BRANCH/mtui"
-    fi
+        _log "Copying local script..."
+        cp "$PWD/mtui" "$mtui_link"
 
-    if [[ -f "$mtui_source" ]]; then
-        cp "$mtui_source" "$mtui_link"
+        # SOTA: Inject dynamic git version into the installed copy ONLY
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            local git_ver
+            git_ver="$(git describe --tags --always --dirty --match "v*" 2>/dev/null || echo "$MTUI_VERSION-dev")"
+
+            # Use sed to overwrite the version in the destination file
+            # (.bak ensures macOS/BSD sed compatibility)
+            sed -i.bak "s/^MTUI_VERSION=.*/MTUI_VERSION=\"$git_ver\"/" "$mtui_link"
+            rm -f "${mtui_link}.bak"
+
+            _log "Baked local dev version: $git_ver"
+        fi
     else
+        _log "Fetching script from GitHub..."
+        local mtui_source="https://raw.githubusercontent.com/robchrob/multitui/$REMOTE_BRANCH/mtui"
         curl -fsSL "$mtui_source" -o "$mtui_link"
     fi
     chmod +x "$mtui_link"
@@ -566,7 +576,7 @@ cmd_update() {
 }
 
 show_help() {
-    echo -e "${C_BOLD}MultiTUI (mtui) — OpenCode Docker Orchestrator${C_RESET}"
+    echo -e "${C_BOLD}MultiTUI (mtui ${MTUI_VERSION})${C_RESET} — OpenCode Docker Orchestrator"
     echo "Usage: mtui <command> [args]"
     echo ""
     echo -e "${C_BOLD}Global Commands:${C_RESET}"
@@ -635,6 +645,9 @@ Run 'mtui branch create' or 'mtui branch status'"
         ;;
     update)
         cmd_update "$@"
+        ;;
+    -v|--version|version)
+        echo "MultiTUI $MTUI_VERSION"
         ;;
     -h|--help)
         show_help

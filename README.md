@@ -68,6 +68,15 @@ Container persists. Detach with `Ctrl+C`, reattach with `mtui start`.
 | `mtui branch status` | Show branch divergence vs base |
 | `mtui update [--continue]` | Rebase branch onto base |
 
+### Shell Completion (bash)
+```bash
+# Preview completion
+source ./mtui_completion.bash
+
+# Persist configuration
+cp ./mtui_completion.bash /etc/bash_completion.d/mtui
+```
+
 ---
 
 ## Configuration

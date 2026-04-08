@@ -1,10 +1,29 @@
 # Plan.md — MultiTUI Roadmap
 
 ```
-SESSION_CURRENT = 0.2.0
-SESSION_TARGET  = 0.2.0
+SESSION_CURRENT = 0.2.1
+SESSION_TARGET  = 0.2.1
 SESSION_SCOPE   = Retroactive: inferred from git history
 ```
+
+## v0.2.1 — Command & Skill Enhancements
+
+**Goal:** Add new commands and improve prompts for generic project support.
+
+This version adds the fix-commit-msg.md command for auditing and fixing commit messages to comply with Conventional Commits specification. It also updates the magic versioning skill to support manual workflow where git tags serve as source of truth. Additionally, prompts were generalized to work well with any technology stack rather than being overly tuned for JS/Python.
+
+**Motivation:** Users needed a way to enforce commit message standards across the project history. The prompts were too specific to certain language stacks, producing poor results for other technologies.
+
+**Approach:** Added a new autonomous command that reads diffs and determines if commit messages need rewriting. Updated the magic versioning skill with manual workflow documentation. Generalized discovery prompts to be stack-agnostic.
+
+**Definition of Done:** All commits in this version merged to main.
+
+**Tasks**
+- [x] Add fix-commit-msg.md command for commit message auditing
+- [x] Update magic versioning skill for manual workflow
+- [x] Generalize prompts for generic project discovery
+- [x] Update model provider configuration
+- [x] Remove unused MCP server configurations
 
 ## v0.2.0 — Magic Versioning Protocol
 
