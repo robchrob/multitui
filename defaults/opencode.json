@@ -1,6 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "{env:MTUI_MODEL}",
+  "provider": {
+    "zai-coding-plan": {
+      "name": "Z.AI Coding Plan",
+      "api": "https://api.z.ai/api/coding/paas/v4",
+      "env": ["ZAI_API_KEY"]
+    }
+  },
   "permission": {
     "bash": {
       "*": "allow",
@@ -94,9 +101,10 @@
     "*": "allow"
   },
   "plugin": [
-      "@slkiser/opencode-quota",
-      "@bdliyq/opencode-rate-limit-retry@latest"
-   ],
+    "@slkiser/opencode-quota",
+    "@guyinwonder168/opencode-glm-quota",
+    "@bdliyq/opencode-rate-limit-retry@latest"
+  ],
   "mcp": {
     "memory": {
       "type": "local",
