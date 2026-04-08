@@ -100,11 +100,6 @@
     "external_directory": "deny",
     "*": "allow"
   },
-  "plugin": [
-    "@slkiser/opencode-quota",
-    "@guyinwonder168/opencode-glm-quota",
-    "@bdliyq/opencode-rate-limit-retry@latest"
-  ],
   "mcp": {
     "memory": {
       "type": "local",
