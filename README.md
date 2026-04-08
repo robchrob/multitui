@@ -156,7 +156,7 @@ Conflicts? Resolve inside `agent/`, then `mtui update --continue`.
 git clone git@github.com:robchrob/multitui.git
 cd multitui
 ./mtui setup
-./tests/e2e/test/run.sh
+./tests/run.sh
 ```
 
 See `AGENTS_DEV.md` for contributor guidelines.

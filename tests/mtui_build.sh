@@ -6,8 +6,8 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-LIB_DIR="$SCRIPT_DIR/../lib"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
 
 source "$LIB_DIR/test_helpers.sh"
 source "$LIB_DIR/docker.sh"

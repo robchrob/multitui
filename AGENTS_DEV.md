@@ -15,21 +15,23 @@ defaults/
 prompts/
   init.md                    ← AI prompt for new project scaffolding
   bootstrap.md               ← AI prompt for existing project bootstrap
-tests/e2e/
-  test/                      ← test suites
-    run.sh                   ← master runner (build gate + orchestration)
-    mtui_*.sh                ← test runners
-  lib/                       ← shared helpers
+tests/
+  run.sh                   ← master runner (build gate + orchestration)
+  mtui_*.sh                ← test runners
+lib/                       ← shared helpers
 ```
 
 ## Quick Start
 ```bash
-# Run all tests
-./tests/e2e/test/run.sh
+# Run smoke tests
+./tests/local.sh
+
+# Run all tests (including token used for init / bootstrap)
+./tests/run.sh
 ```
 
 ## mtui CLI Commands
-- `mtui setup` — download/update mtui binary, build image (no ~/.multitui clone)
+- `mtui setup` — download/update mtui binary, build image - works locally too
 - `mtui build [--no-cache]` — build Docker image (checks OpenCode updates, auto-rebuilds if needed)
 - `mtui init "<desc>"` — attach agent/, scaffold new project with prompt/init.md
 - `mtui bootstrap "<desc>"` — attach agent/, analyze existing project with prompt/bootstrap.md
@@ -47,13 +49,13 @@ tests/e2e/
 # 0. Research with exa search, context7 and deepwiki anomalyco/opencode, read files
 # 1. Edit mtui script and/or defaults/prompts/other
 # 2. Run and ADD relevant tests (for new feature / changes)
-./tests/e2e/test/run.sh -f build      # after Dockerfile changes
-./tests/e2e/test/run.sh -f container  # after container lifecycle changes
-./tests/e2e/test/run.sh -f setup       # after install changes
-./tests/e2e/test/run.sh -f branch      # after branch feature changes
-./tests/e2e/test/run.sh -f init        # after init prompt changes
-./tests/e2e/test/run.sh -f bootstrap   # after bootstrap prompt changes
-./tests/e2e/test/run.sh -f opencode    # after image/tooling changes
+./tests/run.sh -f build      # after Dockerfile changes
+./tests/run.sh -f container  # after container lifecycle changes
+./tests/run.sh -f setup       # after install changes
+./tests/run.sh -f branch      # after branch feature changes
+./tests/run.sh -f init        # after init prompt changes
+./tests/run.sh -f bootstrap   # after bootstrap prompt changes
+./tests/run.sh -f opencode    # after image/tooling changes
 # 3. Test runs based on Testing Hierarchy
 ```
 
@@ -62,25 +64,22 @@ tests/e2e/
 # Single test function — only works for suites that create their own fixtures inline
 # (mtui_container, mtui_build, mtui_opencode, mtui_setup, mtui_branch)
 # DO NOT use this pattern for mtui_init or mtui_bootstrap — they require setup() to run first
-bash -c 'source tests/e2e/test/mtui_container.sh && test_status_no_container'
+bash -c 'source tests/mtui_container.sh && test_status_no_container'
 
 # Single suite (always safe — runs setup() + all tests + teardown)
-./tests/e2e/test/run.sh -f container
+./tests/run.sh -f container
 
 # Full suite
-./tests/e2e/test/run.sh
+./tests/run.sh
 ```
 
-> **init/bootstrap tests cannot be run as single functions.** They share expensive AI setup across all assertions — call the suite directly: `./tests/e2e/test/run.sh -f init`
+> **init/bootstrap tests cannot be run as single functions.** They share expensive AI setup across all assertions — call the suite directly: `./tests/run.sh -f init`
 
 ### Test Suite Architecture
 - **Build gate**: `run.sh` checks `docker images -q multitui` once before any suite. Builds only if missing. Individual suites never build.
 - **Parallel AI**: init/bootstrap setup spawns Python + JS sessions concurrently (`&` + `wait`), cutting AI time in half
 - **One AI call per stack**: `setup()` runs `mtui init`/`bootstrap` once; all assertions reuse `PY_DIR`/`JS_DIR`
-- **Artifacts**: `teardown()` copies to `tests/e2e/output/<timestamp>_<suite>_<pass|fail>/` — always saved for debugging (read to analyze and adjust course)
-
-### Critical: AGENTS.md Contamination Bug
-Every `mtui init`/`bootstrap` call MUST run inside `(cd "$project_dir" && ...)` — never from the test script's CWD. Running from wrong directory generates AGENTS.md in the repo root, contaminating the project with wrong-stack content.
+- **Artifacts**: `teardown()` copies to `tests/output/<timestamp>_<suite>_<pass|fail>/` — always saved for debugging (read to analyze and adjust course)
 
 ## Conventions
 - Bash 4.3+ required (namerefs)
@@ -88,4 +87,3 @@ Every `mtui init`/`bootstrap` call MUST run inside `(cd "$project_dir" && ...)` 
 - Fixtures under `/tmp/mtui_test_$$`, cleaned in teardown
 - No suite builds the image — that's `run.sh`'s job
 - Container names: `mtui-<project-dir-lowercased>`
-- Remote agent repo: `git@github.com:robchrob/multitui.git` branch `develop-detach`

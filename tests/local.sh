@@ -1,11 +1,12 @@
 #!/bin/bash
-# Master test runner for MultiTUI e2e tests
+# Local test runner for MultiTUI — runs all suites EXCEPT init/bootstrap
+# Use this for quick local validation (no OPENROUTER_API_KEY needed)
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-LIB_DIR="$SCRIPT_DIR/../lib"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
 
 source "$LIB_DIR/test_helpers.sh"
 source "$LIB_DIR/docker.sh"
@@ -37,10 +38,6 @@ check_prerequisites() {
     log_pass "Prerequisites OK"
 }
 
-# Build the multitui image once before any suite runs.
-# If the image already exists, mtui build is a no-op (it detects the version
-# and skips unless an update is available). Individual suites never trigger
-# builds — they rely on this single gate.
 ensure_image() {
     if docker images -q "$MTUI_IMAGE" 2>/dev/null | grep -q .; then
         log_info "Image $MTUI_IMAGE already exists — skipping build"
@@ -48,21 +45,19 @@ ensure_image() {
     fi
 
     log_info "Image $MTUI_IMAGE not found — building now (one-time)..."
-    "$REPO_ROOT/mtui" build || {
+    if ! "$REPO_ROOT/mtui" build; then
         log_fail "mtui build failed — cannot run tests without the image"
         return 1
-    }
+    fi
 }
 
-# All test suites — OPENROUTER_API_KEY is assumed to be set in the environment
+# All test suites EXCEPT init and bootstrap (no OPENROUTER_API_KEY needed)
 TEST_SUITES=(
     mtui_setup.sh       # installs framework, links binary
     mtui_build.sh       # builds Docker image, checks opencode binary
     mtui_opencode.sh    # binary version/help/env sanity
     mtui_container.sh   # start/status/clean/list lifecycle
-    mtui_init.sh        # full init workflow, file content checks
-    mtui_bootstrap.sh   # full bootstrap workflow, stack detection
-    mtui_branch.sh      # branch create/status/update (local-only, no GITHUB_TOKEN)
+    mtui_branch.sh      # branch create/status/update (local-only)
 )
 
 run_suite() {
@@ -80,33 +75,18 @@ run_suite() {
     log_test "Suite: $suite_name"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    local output_dir="$REPO_ROOT/tests/e2e/output"
-    mkdir -p "$output_dir"
-    local timestamp
-    timestamp="$(date +%Y%m%d_%H%M%S)"
-    local log_file="$output_dir/${timestamp}_${suite_name}.log"
-
     local start
     start=$(date +%s)
 
-    if bash "$suite_file" 2>&1 | tee "$log_file"; then
+    if bash "$suite_file"; then
         local elapsed=$(( $(date +%s) - start ))
         log_pass "$suite_name — ${elapsed}s"
+        return 0
     else
         local elapsed=$(( $(date +%s) - start ))
         log_fail "$suite_name — ${elapsed}s"
+        return 1
     fi
-
-    cleanup_old_outputs "$output_dir" "$suite_name"
-}
-
-cleanup_old_outputs() {
-    local output_dir="$1"
-    local suite_name="$2"
-    
-    local all_runs
-    all_runs=$(ls -1t "$output_dir"/"*"_"${suite_name}.log" 2>/dev/null | tail -n +3)
-    [[ -n "$all_runs" ]] && rm -f $all_runs 2>/dev/null || true
 }
 
 run_all_tests() {
@@ -128,7 +108,7 @@ run_all_tests() {
 
 show_usage() {
     cat << 'EOF'
-MultiTUI E2E Test Runner
+MultiTUI Local Test Runner (no init/bootstrap)
 
 Usage: $0 [options]
 
@@ -137,25 +117,17 @@ Options:
     -v, --verbose          Enable verbose output
     -h, --help             Show this help
 
-Environment Variables:
-    OPENROUTER_API_KEY   Required (init and bootstrap tests call OpenCode)
-    GITHUB_TOKEN         Optional, for GitHub MCP
-    EXA_API_KEY          Optional, for Exa MCP
-    MTUI_TEST_VERBOSE    Set to 1 to enable verbose output
-    MTUI_TEST_FILTER     Name pattern to filter suites
-
-Suites:
+Suites (no OPENROUTER_API_KEY needed):
     mtui_setup      — global install + binary link
     mtui_build      — Docker image build
     mtui_opencode   — opencode binary sanity
     mtui_container  — start / status / clean / list lifecycle
-    mtui_init       — project scaffolding + file content validation
-    mtui_bootstrap  — existing project analysis + stack detection
-    mtui_branch     — branch create/status/update (local-only, no network)
+    mtui_branch     — branch create/status/update (local-only)
 
 Examples:
-    $0                            Run all suites
+    $0                            Run all local suites
     $0 -f container               Run only container lifecycle tests
+    $0 -f branch                 Run only branch tests
 EOF
 }
 

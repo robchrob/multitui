@@ -5,20 +5,22 @@ End-to-end test harness for MultiTUI. Tests validate the complete workflow: mtui
 ## Directory Structure
 
 ```
-tests/e2e/
+tests/
 ├── lib/
 │   ├── docker.sh      # Docker helper functions
 │   ├── mtui.sh        # mtui CLI wrapper
 │   ├── opencode.sh    # OpenCode helpers
-│   └── fixtures.sh    # Fixture generators
-├── test/
-│   ├── run.sh                    # Master test runner
-│   ├── mtui_setup.sh             # Global setup tests
-│   ├── mtui_build.sh             # Docker image build tests
-│   ├── mtui_init.sh              # Project init tests
-│   ├── mtui_bootstrap.sh         # Project bootstrap tests
-│   ├── mtui_container.sh         # Container lifecycle tests
-│   └── mtui_opencode.sh          # OpenCode flow tests
+│   ├── fixtures.sh    # Fixture generators
+│   └── test_helpers.sh # Test utilities
+├── run.sh             # Master test runner
+├── local.sh           # Smoke tests (no API key required)
+├── mtui_setup.sh      # Global setup tests
+├── mtui_build.sh      # Docker image build tests
+├── mtui_init.sh       # Project init tests (requires OPENROUTER_API_KEY)
+├── mtui_bootstrap.sh # Project bootstrap tests (requires OPENROUTER_API_KEY)
+├── mtui_container.sh # Container lifecycle tests
+├── mtui_branch.sh     # Branch feature tests
+├── mtui_opencode.sh   # OpenCode flow tests
 └── README.md
 ```
 
@@ -26,19 +28,22 @@ tests/e2e/
 
 ```bash
 # Run all tests
-tests/e2e/test/run.sh
+./tests/run.sh
 
 # Run specific test suite
-tests/e2e/test/mtui_build.sh
+./tests/run.sh -f build
+
+# Run smoke tests (no API key needed)
+./tests/local.sh
 
 # Run with verbose output
-MTUI_TEST_VERBOSE=1 tests/e2e/test/run.sh
+MTUI_TEST_VERBOSE=1 ./tests/run.sh
 ```
 
 ## Requirements
 
 ### Environment Variables
-- `OPENROUTER_API_KEY` - Required for OpenCode tests (AI execution)
+- `OPENROUTER_API_KEY` - Required for init/bootstrap/opencode tests (AI execution)
 - `GITHUB_TOKEN` - Optional, for GitHub MCP
 - `EXA_API_KEY` - Optional, for Exa MCP
 
@@ -57,6 +62,7 @@ MTUI_TEST_VERBOSE=1 tests/e2e/test/run.sh
 | `mtui_bootstrap.sh` | Project analysis |
 | `mtui_container.sh` | Container lifecycle (start, stop, status) |
 | `mtui_opencode.sh` | OpenCode execution inside container |
+| `mtui_branch.sh` | Branch feature (create, status, update) |
 
 ## Test Execution
 
@@ -64,6 +70,22 @@ Each test suite follows this pattern:
 1. **setup()** - Create temp directory, build image if needed
 2. **test_*** - Run test assertions
 3. **teardown()** - Cleanup containers and directories
+
+### Testing Hierarchy
+
+```bash
+# Single test function — only works for suites that create their own fixtures inline
+# (mtui_container, mtui_build, mtui_opencode, mtui_setup, mtui_branch)
+bash -c 'source tests/mtui_container.sh && test_status_no_container'
+
+# Single suite (always safe — runs setup() + all tests + teardown)
+./tests/run.sh -f container
+
+# Full suite
+./tests/run.sh
+```
+
+> **init/bootstrap tests cannot be run as single functions.** They share expensive AI setup across all assertions — call the suite directly: `./tests/run.sh -f init`
 
 ## Fixture Types
 
