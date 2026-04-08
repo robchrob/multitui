@@ -159,6 +159,7 @@ _build_docker_flags() {
         --group-add "$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
         -v /var/run/docker.sock:/var/run/docker.sock
         -e OPENROUTER_API_KEY
+        -e ZAI_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
         -e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
         -e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
