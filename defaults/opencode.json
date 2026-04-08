@@ -1,11 +1,20 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "{env:MTUI_MODEL}",
+  "plugin": [
+    "@code-yeongyu/oh-my-openagent",
+    "@hueyexe/opencode-ensemble@0.9.0"
+  ],
   "provider": {
     "zai-coding-plan": {
       "name": "Z.AI Coding Plan",
       "api": "https://api.z.ai/api/coding/paas/v4",
       "env": ["ZAI_API_KEY"]
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "api": "https://openrouter.ai/api/v1",
+      "env": ["OPENROUTER_API_KEY"]
     }
   },
   "permission": {
@@ -97,7 +106,6 @@
     "lsp": "allow",
     "todowrite": "allow",
     "todoread": "allow",
-    "external_directory": "deny",
     "*": "allow"
   },
   "mcp": {
