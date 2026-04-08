@@ -1,7 +1,7 @@
 # agent/ directory
 TODO
 agent/
-tests/e2e/output/
+tests/output/
 
 # Python artifacts
 __pycache__/

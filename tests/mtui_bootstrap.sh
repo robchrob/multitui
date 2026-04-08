@@ -7,15 +7,15 @@
 #
 # WARNING: Individual test functions CANNOT be sourced and called directly.
 # They depend on setup() having run first. Always run via the suite runner:
-#   ./tests/e2e/test/run.sh -f bootstrap
+#   ./tests/run.sh -f bootstrap
 # or via main():
-#   bash tests/e2e/test/mtui_bootstrap.sh
+#   bash tests/mtui_bootstrap.sh
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-LIB_DIR="$SCRIPT_DIR/../lib"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
 
 source "$LIB_DIR/test_helpers.sh"
 source "$LIB_DIR/docker.sh"
@@ -32,12 +32,12 @@ JS_DIR=""
 _require_fixtures() {
     if [[ -z "${PY_DIR:-}" || ! -d "$PY_DIR" ]]; then
         log_fail "ISOLATION ERROR: PY_DIR is unset or missing. setup() must run before test functions."
-        log_fail "Run this suite via: ./tests/e2e/test/run.sh -f bootstrap"
+        log_fail "Run this suite via: ./tests/run.sh -f bootstrap"
         exit 1
     fi
     if [[ -z "${JS_DIR:-}" || ! -d "$JS_DIR" ]]; then
         log_fail "ISOLATION ERROR: JS_DIR is unset or missing. setup() must run before test functions."
-        log_fail "Run this suite via: ./tests/e2e/test/run.sh -f bootstrap"
+        log_fail "Run this suite via: ./tests/run.sh -f bootstrap"
         exit 1
     fi
 }
@@ -83,7 +83,7 @@ setup() {
 
 teardown() {
     local status="${1:-unknown}"
-    local output_dir="$REPO_ROOT/tests/e2e/output"
+    local output_dir="$REPO_ROOT/tests/output"
     mkdir -p "$output_dir"
 
     local timestamp
