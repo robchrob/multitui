@@ -1,9 +1,9 @@
 # Plan.md — MultiTUI Roadmap
 
 ```
-SESSION_CURRENT = 0.0.0
+SESSION_CURRENT = 0.2.0
 SESSION_TARGET  = 0.2.0
-SESSION_SCOPE   = Restructure versioning with more granular versions
+SESSION_SCOPE   = Retroactive: inferred from git history
 ```
 
 ## v0.2.0 — Magic Versioning Protocol
