@@ -60,23 +60,16 @@ RUN if [ -n "$OPENCODE_VERSION" ]; then \
       @modelcontextprotocol/server-sequential-thinking
 
 # Pre-install oh-my-opencode with Z.ai + OpenCode Go
-RUN bun x oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --openai=no --opencode-zen=no --zai-coding-plan=yes --opencode-go=yes
+RUN bun x oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --openai=no --opencode-zen=no --zai-coding-plan=yes --opencode-go=no
+RUN bun x oh-my-opencode doctor
 
 RUN hash -r
 
 # OpenCode configuration
-ENV OPENCODE_CONFIG_DIR=/workspace/.opencode \
-    OPENCODE_DATA_DIR=/workspace/.opencode-data \
-    OPENCODE_CACHE_DIR=/workspace/.opencode-cache \
-    OPENCODE_STATE_DIR=/workspace/.opencode-state \
-    OPENCODE_LOG_DIR=/workspace/.opencode-log \
+ENV OPENCODE_CONFIG_DIR=/home/dev/.opencode \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
 USER root
-RUN mkdir -p /workspace/.opencode-data /workspace/.opencode-cache /workspace/.opencode-state /workspace/.opencode-log && \
-    chown -R dev:dev /workspace/.opencode* && \
-    chmod 700 /workspace/.opencode-data /workspace/.opencode-state && \
-    chmod 755 /workspace/.opencode-cache /workspace/.opencode-log
 RUN rm -rf /tmp/* /var/cache/apk/* /home/dev/.cache /root/.local /root/.config /root/.npm
 
 USER dev

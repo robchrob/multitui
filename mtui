@@ -163,11 +163,7 @@ _build_docker_flags() {
         -e OPENCODEGO_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
         -e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
-        -e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
-        -e OPENCODE_DATA_DIR="/workspace/.opencode-data"
-        -e OPENCODE_CACHE_DIR="/workspace/.opencode-cache"
-        -e OPENCODE_STATE_DIR="/workspace/.opencode-state"
-        -e OPENCODE_LOG_DIR="/workspace/.opencode-log"
+        #-e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
         -e EXA_API_KEY
         -e PROJECT_ROOT="$PWD"
     )
