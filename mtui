@@ -91,9 +91,9 @@ _attach() {
         _log "Agent missing or broken, re-cloning branch: $branch..."
         rm -rf agent
 
-        # Try to clone the specified branch, fall back to default branch if it doesn't exist
-        if ! git clone --depth 1 -b "$branch" "$REMOTE_REPO" agent 2>/dev/null; then
-            git clone --depth 1 "$REMOTE_REPO" agent
+        # Use --no-single-branch to ensure all remote branches are available
+        if ! git clone --depth 1 --no-single-branch -b "$branch" "$REMOTE_REPO" agent 2>/dev/null; then
+            git clone --depth 1 --no-single-branch "$REMOTE_REPO" agent
             if [[ "$branch" != "$REMOTE_BRANCH" ]]; then
                 git -C agent checkout -q "$branch" 2>/dev/null || true
             fi
@@ -160,6 +160,7 @@ _build_docker_flags() {
         -v /var/run/docker.sock:/var/run/docker.sock
         -e OPENROUTER_API_KEY
         -e ZAI_API_KEY
+        -e OPENCODEGO_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
         -e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
         -e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
@@ -536,6 +537,31 @@ cmd_branch_status() {
 }
 
 cmd_update() {
+    if [[ ! -d "agent" ]]; then
+        _err "Agent not attached. Run 'mtui init' or 'mtui branch create' first."
+    fi
+
+    # Check for rebase in agent directory (not current dir)
+    if [[ -f "agent/.git/rebase-merge" ]] || [[ -d "agent/.git/rebase-merge" ]]; then
+        _log "Rebase in progress, continuing..."
+        git -C agent rebase --continue 2>/dev/null || _err "Rebase failed. Resolve conflicts manually in agent/"
+        echo -e "${C_GREEN}[✔] Rebase completed.${C_RESET}"
+        return 0
+    fi
+
+    local current_branch
+    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD)"
+
+    # If on base branch, just pull updates (no .mtui-branch needed)
+    if [[ "$current_branch" == "$REMOTE_BRANCH" ]]; then
+        _log "Updating $REMOTE_BRANCH branch..."
+        git -C agent fetch origin "$REMOTE_BRANCH" -q || _err "Failed to fetch $REMOTE_BRANCH"
+        git -C agent reset --hard "origin/$REMOTE_BRANCH" -q || _err "Failed to update $REMOTE_BRANCH"
+        echo -e "${C_GREEN}[✔] Updated $REMOTE_BRANCH to latest.${C_RESET}"
+        return 0
+    fi
+
+    # Not on base branch: look for .mtui-branch file
     if [[ ! -f ".mtui-branch" ]]; then
         _err "No .mtui-branch file. Run 'mtui branch create' first."
     fi
@@ -543,25 +569,12 @@ cmd_update() {
     local branch
     branch="$(cat .mtui-branch)"
 
-    if [[ ! -d "agent" ]]; then
-        _err "Agent not attached. Run 'mtui init' or 'mtui branch create' first."
-    fi
-
-    if [[ -f ".git/rebase-merge" ]] || [[ -d ".git/rebase-merge" ]]; then
-        _log "Rebase in progress, continuing..."
-        git -C agent rebase --continue 2>/dev/null || _err "Rebase failed. Resolve conflicts manually in agent/"
-        echo -e "${C_GREEN}[✔] Rebase completed.${C_RESET}"
-        return 0
-    fi
-
     _log "Updating $branch from $REMOTE_BRANCH..."
 
     git -C agent fetch origin -q || _err "Failed to fetch from origin"
     git -C agent fetch origin "$REMOTE_BRANCH" -q || _err "Failed to fetch $REMOTE_BRANCH"
     git -C agent fetch origin "$branch" -q || true
 
-    local current_branch
-    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD)"
     if [[ "$current_branch" != "$branch" ]]; then
         git -C agent checkout -q "$branch" || _err "Failed to checkout $branch"
     fi

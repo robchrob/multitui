@@ -15,6 +15,11 @@
       "name": "OpenRouter",
       "api": "https://openrouter.ai/api/v1",
       "env": ["OPENROUTER_API_KEY"]
+    },
+    "opencode-go": {
+      "name": "OpenCode GO",
+      "api": "https://opencode.ai/zen/go/v1/chat/completions",
+      "env": ["OPENCODEGO_API_KEY"]
     }
   },
   "permission": {
