@@ -162,7 +162,7 @@ _build_docker_flags() {
         -e ZAI_API_KEY
         -e OPENCODEGO_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
+        #-e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
         #-e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
         -e EXA_API_KEY
         -e PROJECT_ROOT="$PWD"

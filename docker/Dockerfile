@@ -61,18 +61,17 @@ RUN if [ -n "$OPENCODE_VERSION" ]; then \
 
 # Pre-install oh-my-opencode with Z.ai + OpenCode Go
 RUN bun x oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --openai=no --opencode-zen=no --zai-coding-plan=yes --opencode-go=no
-RUN bun x oh-my-opencode doctor
+RUN bun x oh-my-opencode doctor --verbose
 
 RUN hash -r
 
 # OpenCode configuration
-ENV OPENCODE_CONFIG_DIR=/home/dev/.opencode \
-    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
-USER root
-RUN rm -rf /tmp/* /var/cache/apk/* /home/dev/.cache /root/.local /root/.config /root/.npm
+#USER root
+#RUN rm -rf /tmp/* /var/cache/apk/* /home/dev/.cache /root/.local /root/.config /root/.npm
 
-USER dev
+#USER dev
 
 WORKDIR /workspace
 
