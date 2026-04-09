@@ -42,8 +42,11 @@ RUN mkdir -p /home/dev/.config
 
 RUN npm config set prefix /home/dev/.npm-global
 
-ENV PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
-RUN echo 'export PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
+# Install bun for oh-my-opencode installer
+RUN curl -fsSL https://bun.sh/install | bash && \
+    chmod +x /home/dev/.bun/bin/bun
+ENV PATH="/home/dev/.bun/bin:/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
+RUN echo 'export PATH="/home/dev/.bun/bin:/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
 
 ARG OPENCODE_VERSION
 
@@ -55,6 +58,9 @@ RUN if [ -n "$OPENCODE_VERSION" ]; then \
     npm install -g \
       @modelcontextprotocol/server-memory \
       @modelcontextprotocol/server-sequential-thinking
+
+# Pre-install oh-my-opencode with Z.ai + OpenCode Go
+RUN bun x oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --openai=no --opencode-zen=no --zai-coding-plan=yes --opencode-go=yes
 
 RUN hash -r
 
