@@ -151,6 +151,20 @@
       "type": "local",
       "command": ["npx", "-y", "a2asearch-mcp"],
       "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "docker",
+        "container",
+        "run",
+        "-i",
+        "--rm",
+        "--network",
+        "host",
+        "mcr.microsoft.com/playwright/mcp"
+      ],
+      "enabled": true
     }
   }
 }
