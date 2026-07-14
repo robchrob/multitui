@@ -105,7 +105,7 @@ cleanup_old_outputs() {
     local suite_name="$2"
     
     local all_runs
-    all_runs=$(ls -1t "$output_dir"/"*"_"${suite_name}.log" 2>/dev/null | tail -n +3)
+    all_runs=$(ls -1t "$output_dir"/*"_${suite_name}.log" 2>/dev/null | tail -n +3) || true
     [[ -n "$all_runs" ]] && rm -f $all_runs 2>/dev/null || true
 }
 

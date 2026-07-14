@@ -153,6 +153,18 @@ _build_docker_flags() {
         esac
     done
 
+    local config_file="$PWD/agent/defaults/opencode.json"
+    local config_dir="$PWD/agent/defaults"
+    local use_global_config=0
+
+    if [[ ! -f "$config_file" ]]; then
+        if [[ -f "$MTUI_HOME/defaults/opencode.json" ]]; then
+            config_file="$MTUI_HOME/defaults/opencode.json"
+            config_dir="$MTUI_HOME/defaults"
+            use_global_config=1
+        fi
+    fi
+
     _flags_ref+=(
         -v "$PWD":"$PWD"
         -w "$PWD"
@@ -162,11 +174,20 @@ _build_docker_flags() {
         -e ZAI_API_KEY
         -e OPENCODEGO_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        #-e OPENCODE_CONFIG="$PWD/agent/defaults/opencode.json"
-        #-e OPENCODE_CONFIG_DIR="$PWD/agent/defaults"
+        -e OPENCODE_CONFIG="$config_file"
+        -e OPENCODE_DATA_DIR="/workspace/.opencode-data"
+        -e OPENCODE_CACHE_DIR="/workspace/.opencode-cache"
+        -e OPENCODE_STATE_DIR="/workspace/.opencode-state"
+        -e OPENCODE_LOG_DIR="/workspace/.opencode-log"
         -e EXA_API_KEY
         -e PROJECT_ROOT="$PWD"
     )
+
+    if [[ "$use_global_config" -eq 1 ]]; then
+        _flags_ref+=(-v "$MTUI_HOME/defaults:$MTUI_HOME/defaults:ro")
+    else
+        _flags_ref+=(-e OPENCODE_CONFIG_DIR="$config_dir")
+    fi
 
     [[ -f "$HOME/.config/uv/uv.toml" ]] && _flags_ref+=(-v "$HOME/.config/uv/uv.toml:/home/dev/.config/uv/uv.toml")
     [[ -f "$HOME/.bunfig.toml" ]] && _flags_ref+=(-v "$HOME/.bunfig.toml:/home/dev/.bunfig.toml")
@@ -218,6 +239,12 @@ cmd_setup() {
     chmod +x "$mtui_link"
 
     cmd_build
+
+    mkdir -p "$MTUI_HOME/defaults"
+    if [[ -d "defaults" ]]; then
+        cp -r defaults/* "$MTUI_HOME/defaults/"
+        _log "Installed global defaults to $MTUI_HOME/defaults/"
+    fi
 
     echo -e "${C_GREEN}[✔] Setup complete! Run 'mtui' anywhere.${C_RESET}"
 }
@@ -323,12 +350,7 @@ cmd_bootstrap() {
 cmd_start() {
     [[ -n "${OPENROUTER_API_KEY:-}" ]] || _err "OPENROUTER_API_KEY not set."
 
-    if [[ ! -d "agent" ]]; then
-        _log "Agent missing, attaching..."
-        _attach
-    fi
-
-    local cn mode
+    local cn mode no_attach=0
     cn="$(_container_name)"
     mode="opencode"
     local port_args=()
@@ -337,6 +359,10 @@ cmd_start() {
         case "$1" in
             --tty)
                 mode="tty"
+                shift
+                ;;
+            --no-attach)
+                no_attach=1
                 shift
                 ;;
             -p|--port)
@@ -351,6 +377,15 @@ cmd_start() {
                 ;;
         esac
     done
+
+    if [[ ! -d "agent" ]]; then
+        if [[ "$no_attach" -eq 1 ]]; then
+            _log "Starting without agent/ (using global config)..."
+        else
+            _log "Agent missing, attaching..."
+            _attach
+        fi
+    fi
 
     docker images -q multitui | grep -q . || _err "No image. Run 'mtui build' first."
 
@@ -597,9 +632,11 @@ show_help() {
     echo -e "${C_BOLD}Project Commands:${C_RESET}"
     echo "  init [instruction]        Scaffold new project, attach agent/, AI generates files"
     echo "  bootstrap [instruction]   Analyze existing codebase and configure MultiTUI"
-    echo "  start [--tty] [-p H:C]    Start or resume OpenCode container for this project"
-    echo "                            --tty   Drop into bash shell instead of OpenCode"
-    echo "                            -p H:C  Expose additional port (set at creation)"
+    echo "  start [--tty] [--no-attach] [-p H:C]"
+    echo "                          Start or resume OpenCode container for this project"
+    echo "                            --tty       Drop into bash shell instead of OpenCode"
+    echo "                            --no-attach Skip agent/ clone; use global config (~/.multitui/defaults)"
+    echo "                            -p H:C      Expose additional port (set at creation)"
     echo "  stop, clean               Stop and remove the container for this project"
     echo "  status                    Show health and status of current project's setup"
     echo ""
@@ -627,13 +664,15 @@ case "$COMMAND" in
     build)
         cmd_build "$@"
         ;;
-    init|bootstrap|start)
+    init|bootstrap)
         _warn_no_agent
         case "$COMMAND" in
             init)      cmd_init "$@" ;;
             bootstrap) cmd_bootstrap "$@" ;;
-            start)     cmd_start "$@" ;;
         esac
+        ;;
+    start)
+        cmd_start "$@"
         ;;
     clean|stop)
         cmd_clean

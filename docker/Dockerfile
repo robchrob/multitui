@@ -1,12 +1,12 @@
 # MultiTUI Base — OpenCode + DooD essentials only
 # No language runtimes. Stack-specific images extend this.
-FROM alpine:3.23
+FROM alpine:3.24.1
 
 ARG HOST_UID=1000
 ARG HOST_GID=1000
 
-ENV DOCKER_VERSION=29.2.1
-ENV DOCKER_COMPOSE_VERSION=2.35.1
+ENV DOCKER_VERSION=29.6.1
+ENV DOCKER_COMPOSE_VERSION=5.3.1
 
 RUN apk add --no-cache \
     nodejs \
@@ -42,11 +42,8 @@ RUN mkdir -p /home/dev/.config
 
 RUN npm config set prefix /home/dev/.npm-global
 
-# Install bun for oh-my-opencode installer
-RUN curl -fsSL https://bun.sh/install | bash && \
-    chmod +x /home/dev/.bun/bin/bun
-ENV PATH="/home/dev/.bun/bin:/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
-RUN echo 'export PATH="/home/dev/.bun/bin:/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
+ENV PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:/root/.local/bin:${PATH}"
+RUN echo 'export PATH="/home/dev/.opencode/bin:/home/dev/.npm-global/bin:/usr/local/bin:${HOME}/.local/bin:${PATH}"' >> /home/dev/.bashrc
 
 ARG OPENCODE_VERSION
 
@@ -59,19 +56,24 @@ RUN if [ -n "$OPENCODE_VERSION" ]; then \
       @modelcontextprotocol/server-memory \
       @modelcontextprotocol/server-sequential-thinking
 
-# Pre-install oh-my-opencode with Z.ai + OpenCode Go
-RUN bun x oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=no --openai=no --opencode-zen=no --zai-coding-plan=yes --opencode-go=no
-RUN bun x oh-my-opencode doctor --verbose
-
 RUN hash -r
 
 # OpenCode configuration
-ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ENV OPENCODE_CONFIG_DIR=/workspace/.opencode \
+    OPENCODE_DATA_DIR=/workspace/.opencode-data \
+    OPENCODE_CACHE_DIR=/workspace/.opencode-cache \
+    OPENCODE_STATE_DIR=/workspace/.opencode-state \
+    OPENCODE_LOG_DIR=/workspace/.opencode-log \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
-#USER root
-#RUN rm -rf /tmp/* /var/cache/apk/* /home/dev/.cache /root/.local /root/.config /root/.npm
+USER root
+RUN mkdir -p /workspace/.opencode /workspace/.opencode-data /workspace/.opencode-cache /workspace/.opencode-state /workspace/.opencode-log && \
+    chown -R dev:dev /workspace/.opencode* && \
+    chmod 755 /workspace/.opencode /workspace/.opencode-cache /workspace/.opencode-log && \
+    chmod 700 /workspace/.opencode-data /workspace/.opencode-state
+RUN rm -rf /tmp/* /var/cache/apk/* /home/dev/.cache /root/.local /root/.config /root/.npm
 
-#USER dev
+USER dev
 
 WORKDIR /workspace
 
@@ -80,6 +82,6 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=2 \
 
 LABEL org.opencontainers.image.title="multitui" \
       org.opencontainers.image.description="OpenCode DooD environment" \
-      org.opencontainers.image.version="0.2.0"
+      org.opencontainers.image.version="0.2.1"
 
 CMD ["bash"]
