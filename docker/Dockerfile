@@ -74,6 +74,14 @@ RUN mkdir -p /workspace/.opencode /workspace/.opencode-data /workspace/.opencode
     chown -R dev:dev /workspace/.opencode* && \
     chmod 755 /workspace/.opencode /workspace/.opencode-cache /workspace/.opencode-log && \
     chmod 700 /workspace/.opencode-data /workspace/.opencode-state
+
+# Bake curated defaults so bare `docker run multitui opencode` works with zero host config.
+# Host config (project-local or $MTUI_HOME/defaults) overrides these via OPENCODE_CONFIG.
+COPY defaults/opencode.json /workspace/.opencode/opencode.json
+COPY defaults/commands /workspace/.opencode/commands
+COPY defaults/skills /workspace/.opencode/skills
+RUN chown -R dev:dev /workspace/.opencode && chmod 755 /workspace/.opencode
+
 RUN rm -rf /tmp/* /var/cache/apk/* /home/dev/.cache /root/.local /root/.config /root/.npm
 
 USER dev
@@ -84,7 +92,7 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=2 \
   CMD node -e "process.exit(0)" || exit 1
 
 LABEL org.opencontainers.image.title="multitui" \
-      org.opencontainers.image.description="OpenCode DooD environment" \
-      org.opencontainers.image.version="0.2.1"
+      org.opencontainers.image.description="OpenCode Docker Runner — DooD environment" \
+      org.opencontainers.image.version="0.3.0"
 
 CMD ["bash"]

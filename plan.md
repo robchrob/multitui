@@ -1,10 +1,32 @@
 # Plan.md — MultiTUI Roadmap
 
 ```
-SESSION_CURRENT = 0.2.1
-SESSION_TARGET  = 0.2.1
-SESSION_SCOPE   = Retroactive: inferred from git history
+SESSION_CURRENT = 0.3.0
+SESSION_TARGET  = 0.3.0
+SESSION_SCOPE   = Product pivot: OpenCode Docker Runner (strip branches + plugins, bake defaults)
 ```
+
+## v0.3.0 — OpenCode Docker Runner
+
+**Goal:** Pivot MultiTUI from an orchestrator with agent branches and autonomous plugins to a focused OSS "OpenCode Docker Runner": DooD + curated defaults, zero third-party plugins.
+
+Competitive research in August 2026 showed the isolation axis is commoditized: Docker Sandboxes ship free microVM isolation with a private daemon (and explicitly call socket-mounting a security compromise), Claude Code/Codex ship native OS sandboxing, and a wave of multi-agent orchestrators (Google Scion, AWS CAO, Kandev) own the orchestration category. MultiTUI's defensible wedge is narrow: **opencode-first, self-hosted, per-project containers on Linux with zero local dependencies.**
+
+**Motivation:** As a product, the branch-per-project machinery (`agent/` clone, `.mtui-branch`, `branch create/status/update`, rebase workflow) added complexity without differentiation, and the third-party plugin stack (oh-my-openagent autonomy layer, opencode-ensemble) was being absorbed by the opencode ecosystem itself. The curated defaults (MCP servers, permissions, skills, commands) are the actual value.
+
+**Approach:** Stripped all agent/branch machinery from the `mtui` script. Removed both third-party plugins from the default config (autonomy via oh-my-openagent is gone; `SYSTEM DIRECTIVE: AUTONOMOUS EXECUTION` headers in command templates are plain opencode command conventions and stay). Baked `defaults/` into the image (`/workspace/.opencode`) so bare `docker run multitui opencode` works with zero host config, with explicit config precedence: project-local → `$MTUI_HOME/defaults` (global) → image-baked. Prompts now install to `$MTUI_HOME/prompts/`. `MTUI_REMOTE`/`MTUI_BRANCH` replaced by `MTUI_UPSTREAM`/`MTUI_UPSTREAM_BRANCH` (used only for install/build fetching). Tests reworked: branch suite removed, new config-precedence suite added, init/bootstrap assert no `agent/` directory.
+
+**Definition of Done:** All commits in this version merged to develop and tagged v0.3.0.
+
+**Tasks**
+- [x] Strip agent/branch machinery from mtui (attach, branch, update, .mtui-branch)
+- [x] Remove oh-my-openagent and opencode-ensemble plugins from defaults
+- [x] Bake defaults, commands, and skills into the image
+- [x] Implement config precedence: project-local → global → image-baked
+- [x] Install prompts to $MTUI_HOME/prompts during setup
+- [x] Update prompts to remove agent/ references
+- [x] Rework tests: drop branch suite, add config-precedence suite
+- [x] Rewrite README for the new positioning (incl. honest DooD security section)
 
 ## v0.2.1 — Command & Skill Enhancements
 

@@ -59,7 +59,6 @@ If it's missing, generate fresh. Follow this structure:
 
 ## Environment
 This project uses MultiTUI — OpenCode runs inside a Docker container
-CRITICAL: Load @agent/AGENTS.md (./agent/AGENTS.md) for execution environment details
 All code execution uses: docker / docker compose
 **User**: dev - sudo IS available if needed!
 ```
@@ -114,13 +113,9 @@ If everything follows standard framework conventions, omit this section.
 ```
 ## Permissions
 ### Allowed without asking
-- All project files (outside agent/)
-
-### Ask first
-- Modify agent/ directory (MultiTUI framework - see @agent/AGENTS.md)
+- All project files
 
 ### Never do
-- Commit changes to agent/ directory
 - Read .env files
 ```
 
@@ -156,12 +151,12 @@ For any other stack:
 - Missing → create with: app service, volume `${PROJECT_ROOT:-.}:/app`, named cache volume, PROJECT_ROOT env var, port mappings
 
 ### .gitignore
-- Exists → append `agent/` if missing, never remove entries
-- Missing → create with `agent/` + language-specific artifacts
+- Exists → preserve entries, add missing language artifacts
+- Missing → create with language-specific artifacts
 
 ### .dockerignore
-- Exists → append `agent/` if missing, never remove entries
-- Missing → create with `agent/`
+- Exists → preserve entries
+- Missing → create with language artifacts
 
 ## Phase 5 — VERIFY
 
@@ -179,7 +174,7 @@ docker compose config --quiet && echo "Valid" || echo "Invalid"
 | Dockerfile missing | Create with stack-appropriate base |
 | docker-compose.yml exists | Preserve services, adapt app if needed |
 | docker-compose.yml missing | Create with proper volumes/ports |
-| .gitignore | Append `agent/` if missing |
-| .dockerignore | Append `agent/` if missing |
+| .gitignore | Preserve or extend with language artifacts |
+| .dockerignore | Preserve or create with language artifacts |
 
 Be adaptive. Make changes that make sense.

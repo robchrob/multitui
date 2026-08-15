@@ -1,10 +1,38 @@
 # Tasks.md — MultiTUI Task Tracker
 
 ```
-SESSION_CURRENT = 0.2.1
-SESSION_TARGET  = 0.2.1
-SESSION_SCOPE   = Retroactive: inferred from git history
+SESSION_CURRENT = 0.3.0
+SESSION_TARGET  = 0.3.0
+SESSION_SCOPE   = Product pivot: OpenCode Docker Runner (strip branches + plugins, bake defaults)
 ```
+
+## v0.3.0 — OpenCode Docker Runner
+- [x] Strip agent/branch machinery from mtui
+  - [x] Remove _attach, _project_branch, _warn_no_agent, _ensure_gitignore_entry
+  - [x] Remove cmd_branch_create, cmd_branch_status, cmd_update + router cases
+  - [x] Remove branch/update from completion script
+  - [x] Drop --no-attach flag (agent concept gone)
+  - [x] Simplify status output (config source instead of agent/branch lines)
+- [x] Remove third-party plugins
+  - [x] Delete defaults/oh-my-openagent.json and defaults/AUTONOMOUS_MODE.md
+  - [x] Remove oh-my-openagent + opencode-ensemble from defaults/opencode.json
+  - [x] Keep SYSTEM DIRECTIVE headers in commands (plain opencode conventions)
+- [x] Bake defaults into image
+  - [x] COPY defaults/commands/skills into /workspace/.opencode in Dockerfile
+  - [x] Switch build context to repo root; remote path fetches repo tarball
+  - [x] Update .dockerignore for new context (node_modules, tests/output)
+- [x] Implement config precedence (project-local → global → image-baked)
+- [x] Install prompts to $MTUI_HOME/prompts during setup
+- [x] Update prompts to remove agent/ references
+- [x] Rework tests
+  - [x] Remove tests/mtui_branch.sh
+  - [x] Add tests/mtui_config.sh (precedence + image bake assertions)
+  - [x] init/bootstrap assert no agent/ directory
+  - [x] setup suite asserts defaults + prompts installed
+  - [x] container suite drops agent clone
+- [x] Rewrite README (positioning, DooD security, alternatives comparison)
+- [x] Update AGENTS.md / AGENTS_DEV.md execution model
+- [x] Update plan.md/tasks.md/changelog.md for v0.3.0
 
 ## v0.2.1 — Command & Skill Enhancements
 - [x] Add fix-commit-msg.md command for commit message auditing

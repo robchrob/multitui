@@ -133,7 +133,6 @@ Include these six sections:
 
   ## Environment
   This project uses MultiTUI — OpenCode runs inside a Docker container
- CRITICAL: Load @agent/AGENTS.md (./agent/AGENTS.md) for execution environment details
   All code execution uses: docker / docker compose
   **User**: dev - sudo IS available if needed!
 
@@ -190,13 +189,9 @@ If everything follows standard framework conventions, omit this section entirely
 #### 5. Permissions
   ## Permissions
   ### Allowed without asking
-  - All project files (outside agent/)
-
-  ### Ask first
-  - Modify agent/ directory (MultiTUI framework - see @agent/AGENTS.md)
+  - All project files
 
   ### Never do
-  - Commit changes to agent/ directory
   - Read .env files
 
 #### 6. context7 IDs
@@ -221,7 +216,6 @@ List every library ID you resolved during this session so future sessions can sk
 
 ### .gitignore / .dockerignore
 Generate a comprehensive .gitignore / .dockerignore for the detected stack covering:
-- agent/ directory
 - Language artifacts (node_modules/, __pycache__/, target/, vendor/, etc.)
 - Package manager files (bun.lock if using text lockfile, .uv/, go.sum if vendored)
 - Build outputs (dist/, build/, *.egg-info/, bin/)
@@ -231,7 +225,6 @@ Generate a comprehensive .gitignore / .dockerignore for the detected stack cover
 - Logs (*.log, logs/, *.log.*)
 - Coverage reports (coverage/, .coverage, *.lcov)
 - Temporary files (*.tmp, .tmp/, *.cache)
-- Docker artifacts (agent/docker/.cache/ if applicable)
 
 Include stack-specific patterns based on detected framework (e.g., Next.js: .next/, SvelteKit: .svelte-kit/, Vite: .vite/).
 

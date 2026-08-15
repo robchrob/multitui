@@ -14,8 +14,6 @@ source "$LIB_DIR/fixtures.sh"
 
 MTUI_IMAGE="${MTUI_IMAGE:-multitui}"
 TEST_TMP_DIR="/tmp/mtui_test_$$"
-REMOTE_REPO="git@github.com:robchrob/multitui.git"
-REMOTE_BRANCH="develop"
 
 # Derive the container name the same way mtui does
 _expected_container_name() {
@@ -46,8 +44,6 @@ test_start_creates_named_container() {
     expected_cn="$(_expected_container_name "$project_dir")"
 
     docker rm -f "$expected_cn" 2>/dev/null || true
-
-    git clone --depth 1 -b develop "$REMOTE_REPO" "$project_dir/agent" 2>/dev/null || true
 
     OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-dummy}" \
         bash -c "cd '$project_dir' && timeout 15 '$REPO_ROOT/mtui' start" 2>&1 &

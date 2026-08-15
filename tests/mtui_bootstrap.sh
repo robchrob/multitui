@@ -174,19 +174,19 @@ test_bootstrap_js_detects_stack() {
 
 # ── Shared ─────────────────────────────────────────────────────────────────
 
-test_bootstrap_attaches_agent() {
+test_bootstrap_no_agent_dir() {
     _require_fixtures
-    log_test "bootstrap attaches the agent/ directory..."
+    log_test "bootstrap does NOT create an agent/ directory..."
 
     local failed=0
     for dir in "$PY_DIR" "$JS_DIR"; do
-        if [[ ! -d "$dir/agent" ]]; then
-            log_fail "agent/ missing in $dir"
+        if [[ -d "$dir/agent" ]]; then
+            log_fail "agent/ exists in $dir"
             failed=1
         fi
     done
 
-    [[ $failed -eq 0 ]] && log_pass "agent/ attached in both projects"
+    [[ $failed -eq 0 ]] && log_pass "No agent/ directory in either project"
     return $failed
 }
 
@@ -202,7 +202,7 @@ main() {
         test_bootstrap_python_commands_use_docker_compose \
         test_bootstrap_js_generates_agents_md \
         test_bootstrap_js_detects_stack \
-        test_bootstrap_attaches_agent; do
+        test_bootstrap_no_agent_dir; do
         log_test "Running $fn..."
         if $fn; then log_pass "$fn"; ((passed++)) || true
         else          log_fail "$fn"; ((failed++)) || true

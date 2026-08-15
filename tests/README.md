@@ -19,8 +19,8 @@ tests/
 ├── mtui_init.sh       # Project init tests (requires OPENROUTER_API_KEY)
 ├── mtui_bootstrap.sh # Project bootstrap tests (requires OPENROUTER_API_KEY)
 ├── mtui_container.sh # Container lifecycle tests
-├── mtui_branch.sh     # Branch feature tests
-├── mtui_opencode.sh   # OpenCode flow tests
+├── mtui_config.sh    # Config precedence tests (project > global > image-baked)
+├── mtui_opencode.sh  # OpenCode flow tests
 └── README.md
 ```
 
@@ -62,7 +62,7 @@ MTUI_TEST_VERBOSE=1 ./tests/run.sh
 | `mtui_bootstrap.sh` | Project analysis |
 | `mtui_container.sh` | Container lifecycle (start, stop, status) |
 | `mtui_opencode.sh` | OpenCode execution inside container |
-| `mtui_branch.sh` | Branch feature (create, status, update) |
+| `mtui_config.sh` | Config precedence (project > global > image-baked) |
 
 ## Test Execution
 
@@ -75,7 +75,7 @@ Each test suite follows this pattern:
 
 ```bash
 # Single test function — only works for suites that create their own fixtures inline
-# (mtui_container, mtui_build, mtui_opencode, mtui_setup, mtui_branch)
+# (mtui_container, mtui_build, mtui_opencode, mtui_setup, mtui_config)
 bash -c 'source tests/mtui_container.sh && test_status_no_container'
 
 # Single suite (always safe — runs setup() + all tests + teardown)

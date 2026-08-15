@@ -56,13 +56,13 @@ ensure_image() {
 
 # All test suites — OPENROUTER_API_KEY is assumed to be set in the environment
 TEST_SUITES=(
-    mtui_setup.sh       # installs framework, links binary
+    mtui_setup.sh       # installs framework, links binary, installs defaults+prompts
     mtui_build.sh       # builds Docker image, checks opencode binary
     mtui_opencode.sh    # binary version/help/env sanity
+    mtui_config.sh      # config precedence: project > global > image-baked
     mtui_container.sh   # start/status/clean/list lifecycle
     mtui_init.sh        # full init workflow, file content checks
     mtui_bootstrap.sh   # full bootstrap workflow, stack detection
-    mtui_branch.sh      # branch create/status/update (local-only, no GITHUB_TOKEN)
 )
 
 run_suite() {
@@ -145,13 +145,13 @@ Environment Variables:
     MTUI_TEST_FILTER     Name pattern to filter suites
 
 Suites:
-    mtui_setup      — global install + binary link
+    mtui_setup      — global install + binary link + defaults/prompts install
     mtui_build      — Docker image build
     mtui_opencode   — opencode binary sanity
+    mtui_config     — config precedence (project > global > image-baked)
     mtui_container  — start / status / clean / list lifecycle
     mtui_init       — project scaffolding + file content validation
     mtui_bootstrap  — existing project analysis + stack detection
-    mtui_branch     — branch create/status/update (local-only, no network)
 
 Examples:
     $0                            Run all suites

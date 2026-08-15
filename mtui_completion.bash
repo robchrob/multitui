@@ -1,5 +1,5 @@
 # mtui bash completion script
-# MultiTUI (mtui) — OpenCode Docker Orchestrator
+# mtui — OpenCode Docker Runner
 # Install: source this file in ~/.bashrc or copy to /etc/bash_completion.d/mtui
 # Requires: bash 4+ (for associative arrays and [[ ]])
 
@@ -17,7 +17,7 @@ _mtui_version() {
 }
 
 _mtui_header() {
-    echo "MultiTUI (mtui) — OpenCode Docker Orchestrator v$(_mtui_version)"
+    echo "mtui — OpenCode Docker Runner v$(_mtui_version)"
 }
 
 _mtui_containers() {
@@ -35,17 +35,11 @@ _mtui() {
     cword=$COMP_CWORD
     
     if [[ $cword -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "setup build init bootstrap start stop clean list status branch update" -- "${cur}"))
+        COMPREPLY=($(compgen -W "setup build init bootstrap start stop clean list status" -- "${cur}"))
         return
     fi
     
     case "${words[1]}" in
-        branch)
-            if [[ $cword -eq 2 ]]; then
-                COMPREPLY=($(compgen -W "create status" -- "${cur}"))
-                return
-            fi
-            ;;
         setup|init|bootstrap)
             return
             ;;
@@ -82,12 +76,6 @@ _mtui() {
             local containers=$(_mtui_containers)
             COMPREPLY=($(compgen -W "$containers" -- "${cur}"))
             return
-            ;;
-        update)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "--continue" -- "${cur}"))
-                return
-            fi
             ;;
     esac
 }

@@ -7,7 +7,7 @@ Extensively use deepwiki anomalyco/opencode and exa search before proceeding to 
 ## Project Structure
 ```
 mtui                         ← single CLI script
-docker/Dockerfile            ← runtime image (Alpine + OpenCode + Docker CLI)
+docker/Dockerfile            ← runtime image (Alpine + OpenCode + Docker CLI + baked defaults)
 defaults/
   opencode.json              ← MCP servers, permissions, model config
   commands/                  ← OpenCode command templates
@@ -31,17 +31,14 @@ lib/                       ← shared helpers
 ```
 
 ## mtui CLI Commands
-- `mtui setup` — download/update mtui binary, build image - works locally too
+- `mtui setup` — download/update mtui binary, build image, install global defaults + prompts
 - `mtui build [--no-cache]` — build Docker image (checks OpenCode updates, auto-rebuilds if needed)
-- `mtui init "<desc>"` — attach agent/, scaffold new project with prompt/init.md
-- `mtui bootstrap "<desc>"` — attach agent/, analyze existing project with prompt/bootstrap.md
+- `mtui init "<desc>"` — scaffold new project with prompt/init.md
+- `mtui bootstrap "<desc>"` — analyze existing project with prompt/bootstrap.md
 - `mtui start [--tty] [-p H:C]` — create/resume background container, exec OpenCode (_interactive_, DO NOT use in DEV_MODE)
 - `mtui clean` — remove project container
-- `mtui status` — report container state, agent status, file presence
+- `mtui status` — report container state + active config source
 - `mtui ls` — show all project containers
-- `mtui branch create` — create/track a project-specific branch (develop-<projectname>)
-- `mtui branch status` — show branch info, commits ahead/behind develop
-- `mtui update [--continue]` — rebase project branch onto latest develop
 
 ## DEV WORKFLOW
 ### Plan → Edit → Test Cycle
@@ -52,7 +49,7 @@ lib/                       ← shared helpers
 ./tests/run.sh -f build      # after Dockerfile changes
 ./tests/run.sh -f container  # after container lifecycle changes
 ./tests/run.sh -f setup       # after install changes
-./tests/run.sh -f branch      # after branch feature changes
+./tests/run.sh -f config      # after config precedence / Dockerfile bake changes
 ./tests/run.sh -f init        # after init prompt changes
 ./tests/run.sh -f bootstrap   # after bootstrap prompt changes
 ./tests/run.sh -f opencode    # after image/tooling changes
@@ -62,7 +59,7 @@ lib/                       ← shared helpers
 ### Testing Hierarchy
 ```bash
 # Single test function — only works for suites that create their own fixtures inline
-# (mtui_container, mtui_build, mtui_opencode, mtui_setup, mtui_branch)
+# (mtui_container, mtui_build, mtui_opencode, mtui_setup, mtui_config)
 # DO NOT use this pattern for mtui_init or mtui_bootstrap — they require setup() to run first
 bash -c 'source tests/mtui_container.sh && test_status_no_container'
 

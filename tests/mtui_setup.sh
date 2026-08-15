@@ -44,7 +44,17 @@ test_setup_e2e() {
         return 1
     fi
 
-    log_pass "Setup works: binary installed, image exists"
+    if [[ ! -f "$HOME/.multitui/defaults/opencode.json" ]]; then
+        log_fail "Global defaults not installed to $HOME/.multitui/defaults/"
+        return 1
+    fi
+
+    if [[ ! -f "$HOME/.multitui/prompts/init.md" ]]; then
+        log_fail "Prompts not installed to $HOME/.multitui/prompts/"
+        return 1
+    fi
+
+    log_pass "Setup works: binary installed, image exists, defaults + prompts installed"
 }
 
 main() {

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.0 — 2026-08-15 [MINOR]
+### Added
+- Baked defaults, commands, and skills into the image (/workspace/.opencode) — bare `docker run multitui opencode` works with zero host config
+- Explicit config precedence: project-local → ~/.multitui/defaults (global) → image-baked
+- Prompts installed to ~/.multitui/prompts/ during setup
+- New mtui_config test suite (config precedence + image bake assertions)
+
+### Changed (Breaking)
+- Removed agent/ branch machinery: `mtui branch create/status`, `mtui update`, `.mtui-branch`, `--no-attach`
+- Removed third-party plugins (oh-my-openagent, opencode-ensemble) from default config — zero plugins shipped
+- Replaced MTUI_REMOTE/MTUI_BRANCH with MTUI_UPSTREAM/MTUI_UPSTREAM_BRANCH (install/build source only)
+- Build context changed to repo root; remote builds fetch the repo tarball
+- Repositioned as "OpenCode Docker Runner" — see README for DooD security notes and alternatives comparison
+
+### Removed
+- defaults/oh-my-openagent.json, defaults/AUTONOMOUS_MODE.md
+- tests/mtui_branch.sh
+
 ## v0.2.1 — 2026-04-08 [MINOR]
 ### Added
 - New fix-commit-msg.md command for auditing and fixing commit messages to comply with Conventional Commits

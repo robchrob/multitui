@@ -1,6 +1,12 @@
 # agent/ directory
 agent/
 
+# node_modules anywhere (build context is repo root)
+**/node_modules/
+
+# Test artifacts
+tests/output/
+
 # Python artifacts
 __pycache__/
 *.py[cod]

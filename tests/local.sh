@@ -53,11 +53,11 @@ ensure_image() {
 
 # All test suites EXCEPT init and bootstrap (no OPENROUTER_API_KEY needed)
 TEST_SUITES=(
-    mtui_setup.sh       # installs framework, links binary
+    mtui_setup.sh       # installs framework, links binary, installs defaults+prompts
     mtui_build.sh       # builds Docker image, checks opencode binary
     mtui_opencode.sh    # binary version/help/env sanity
+    mtui_config.sh      # config precedence: project > global > image-baked
     mtui_container.sh   # start/status/clean/list lifecycle
-    mtui_branch.sh      # branch create/status/update (local-only)
 )
 
 run_suite() {
@@ -118,16 +118,16 @@ Options:
     -h, --help             Show this help
 
 Suites (no OPENROUTER_API_KEY needed):
-    mtui_setup      — global install + binary link
+    mtui_setup      — global install + binary link + defaults/prompts install
     mtui_build      — Docker image build
     mtui_opencode   — opencode binary sanity
+    mtui_config     — config precedence (project > global > image-baked)
     mtui_container  — start / status / clean / list lifecycle
-    mtui_branch     — branch create/status/update (local-only)
 
 Examples:
     $0                            Run all local suites
     $0 -f container               Run only container lifecycle tests
-    $0 -f branch                 Run only branch tests
+    $0 -f config                  Run only config precedence tests
 EOF
 }
 

@@ -1,12 +1,12 @@
 #!/bin/bash
-# MultiTUI — Global CLI Orchestrator
+# mtui — OpenCode Docker Runner
 set -Eeuo pipefail
 shopt -s nullglob
 
-MTUI_VERSION="0.2.1"
+MTUI_VERSION="0.3.0"
 MTUI_HOME="$HOME/.multitui"
-REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
-REMOTE_BRANCH="${MTUI_BRANCH:-develop}"
+UPSTREAM="${MTUI_UPSTREAM:-robchrob/multitui}"
+UPSTREAM_BRANCH="${MTUI_UPSTREAM_BRANCH:-develop}"
 OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-opencode/deepseek-v4-flash-free}"
 
 # --- Colors & Helpers ---
@@ -23,14 +23,6 @@ trap 'rc=$?; echo -e "${C_RED}[✘] error at line $LINENO: ${BASH_COMMAND}${C_RE
 _log() { echo -e "${C_BLUE}[mtui]${C_RESET} $1"; }
 _warn() { echo -e "${C_YELLOW}[!] $1${C_RESET}" >&2; }
 _err() { echo -e "${C_RED}[✘] $1${C_RESET}" >&2; exit 1; }
-
-_warn_no_agent() {
-    if [[ ! -d "agent" ]]; then
-        _warn "No agent/ directory found in this project."
-        _warn "Run 'mtui init' or 'mtui bootstrap' to attach the agent first."
-        sleep 1
-    fi
-}
 
 _container_name() {
     echo "mtui-$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
@@ -54,81 +46,14 @@ _render_template() {
     printf '%s' "$content"
 }
 
-_ensure_gitignore_entry() {
-    local file=".gitignore"
-
-    touch "$file"
-
-    for entry in "agent/"; do
-        if ! grep -qxF "$entry" "$file"; then
-            printf '\n%s\n' "$entry" >> "$file"
-            _log "Added $entry to .gitignore"
-        fi
-    done
-}
-
-_project_branch() {
-    if [[ -f ".mtui-branch" ]]; then
-        cat ".mtui-branch"
+_prompt_file() {
+    local name="$1"
+    if [[ -f "$MTUI_HOME/prompts/$name" ]]; then
+        echo "$MTUI_HOME/prompts/$name"
+    elif [[ -f "$PWD/prompts/$name" ]]; then
+        echo "$PWD/prompts/$name"
     else
-        echo "$REMOTE_BRANCH"
-    fi
-}
-
-_attach() {
-    local branch
-    branch="$(_project_branch)"
-
-    local agent_ok=0
-
-    if [[ -d "agent/.git" ]]; then
-        if git -C agent rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            agent_ok=1
-        fi
-    fi
-
-    if [[ "$agent_ok" -ne 1 ]]; then
-        _log "Agent missing or broken, re-cloning branch: $branch..."
-        rm -rf agent
-
-        # Use --no-single-branch to ensure all remote branches are available
-        if ! git clone --depth 1 --no-single-branch -b "$branch" "$REMOTE_REPO" agent 2>/dev/null; then
-            git clone --depth 1 --no-single-branch "$REMOTE_REPO" agent
-            if [[ "$branch" != "$REMOTE_BRANCH" ]]; then
-                git -C agent checkout -q "$branch" 2>/dev/null || true
-            fi
-        fi
-    fi
-
-    _ensure_gitignore_entry
-
-    local current_branch
-    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo "$REMOTE_BRANCH")"
-
-    if [[ "$current_branch" != "$branch" ]]; then
-        _log "Switching agent to branch: $branch..."
-        git -C agent fetch origin -q >/dev/null 2>&1 || true
-        if git rev-parse "origin/$branch" >/dev/null 2>&1; then
-            git -C agent checkout -q "$branch" >/dev/null 2>&1 || \
-                git -C agent checkout -b "$branch" -t origin/"$branch" -q 2>/dev/null || true
-        fi
-    fi
-
-    if [[ "$branch" == "$REMOTE_BRANCH" ]]; then
-        _log "Updating agent to latest $branch..."
-        git -C agent fetch origin "$branch" -q >/dev/null 2>&1 || true
-        git -C agent checkout -q "$branch" >/dev/null 2>&1 || true
-        git -C agent reset --hard "origin/$branch" -q >/dev/null 2>&1 || true
-    else
-        _log "Updating agent branch $branch (safe rebase)..."
-        git -C agent fetch origin "$REMOTE_BRANCH" -q >/dev/null 2>&1 || true
-        git -C agent fetch origin "$branch" -q >/dev/null 2>&1 || true
-        if git -C agent rebase "origin/$REMOTE_BRANCH" >/dev/null 2>&1; then
-            : # rebase succeeded
-        else
-            _warn "Rebase conflicts detected. Resolve in agent/ then run 'mtui update --continue'"
-            exit 1
-        fi
+        _err "Missing prompt template: $name (run 'mtui setup' first)"
     fi
 }
 
@@ -153,16 +78,19 @@ _build_docker_flags() {
         esac
     done
 
-    local config_file="$PWD/agent/defaults/opencode.json"
-    local config_dir="$PWD/agent/defaults"
-    local use_global_config=0
+    # Config precedence: project-local → global ($MTUI_HOME/defaults) → image-baked
+    local config_file="" config_dir="" use_global_config=0
 
-    if [[ ! -f "$config_file" ]]; then
-        if [[ -f "$MTUI_HOME/defaults/opencode.json" ]]; then
-            config_file="$MTUI_HOME/defaults/opencode.json"
-            config_dir="$MTUI_HOME/defaults"
-            use_global_config=1
-        fi
+    if [[ -f "$PWD/.multitui/opencode.json" ]]; then
+        config_file="$PWD/.multitui/opencode.json"
+        config_dir="$PWD/.multitui"
+    elif [[ -f "$PWD/opencode.json" ]]; then
+        config_file="$PWD/opencode.json"
+        config_dir="$PWD"
+    elif [[ -f "$MTUI_HOME/defaults/opencode.json" ]]; then
+        config_file="$MTUI_HOME/defaults/opencode.json"
+        config_dir="$MTUI_HOME/defaults"
+        use_global_config=1
     fi
 
     _flags_ref+=(
@@ -174,7 +102,6 @@ _build_docker_flags() {
         -e ZAI_API_KEY
         -e OPENCODEGO_API_KEY
         -e OPENCODE_DEFAULT_MODEL="$OPENCODE_DEFAULT_MODEL"
-        -e OPENCODE_CONFIG="$config_file"
         -e OPENCODE_DATA_DIR="/workspace/.opencode-data"
         -e OPENCODE_CACHE_DIR="/workspace/.opencode-cache"
         -e OPENCODE_STATE_DIR="/workspace/.opencode-state"
@@ -183,10 +110,15 @@ _build_docker_flags() {
         -e PROJECT_ROOT="$PWD"
     )
 
-    if [[ "$use_global_config" -eq 1 ]]; then
-        _flags_ref+=(-v "$MTUI_HOME/defaults:$MTUI_HOME/defaults:ro")
+    if [[ -n "$config_file" ]]; then
+        _flags_ref+=(-e OPENCODE_CONFIG="$config_file")
+        if [[ "$use_global_config" -eq 1 ]]; then
+            _flags_ref+=(-v "$MTUI_HOME/defaults:$MTUI_HOME/defaults:ro")
+        else
+            _flags_ref+=(-e OPENCODE_CONFIG_DIR="$config_dir")
+        fi
     else
-        _flags_ref+=(-e OPENCODE_CONFIG_DIR="$config_dir")
+        _log "Using image-baked defaults (/workspace/.opencode)"
     fi
 
     [[ -f "$HOME/.config/uv/uv.toml" ]] && _flags_ref+=(-v "$HOME/.config/uv/uv.toml:/home/dev/.config/uv/uv.toml")
@@ -233,17 +165,20 @@ cmd_setup() {
         fi
     else
         _log "Fetching script from GitHub..."
-        local mtui_source="https://raw.githubusercontent.com/robchrob/multitui/$REMOTE_BRANCH/mtui"
-        curl -fsSL "$mtui_source" -o "$mtui_link"
+        curl -fsSL "https://raw.githubusercontent.com/$UPSTREAM/$UPSTREAM_BRANCH/mtui" -o "$mtui_link"
     fi
     chmod +x "$mtui_link"
 
     cmd_build
 
-    mkdir -p "$MTUI_HOME/defaults"
+    mkdir -p "$MTUI_HOME/defaults" "$MTUI_HOME/prompts"
     if [[ -d "defaults" ]]; then
         cp -r defaults/* "$MTUI_HOME/defaults/"
         _log "Installed global defaults to $MTUI_HOME/defaults/"
+    fi
+    if [[ -d "prompts" ]]; then
+        cp -r prompts/* "$MTUI_HOME/prompts/"
+        _log "Installed prompts to $MTUI_HOME/prompts/"
     fi
 
     echo -e "${C_GREEN}[✔] Setup complete! Run 'mtui' anywhere.${C_RESET}"
@@ -258,16 +193,20 @@ cmd_build() {
         shift
     done
 
-    local dockerfile_dir
+    local build_context dockerfile_dir
     if [[ -f "docker/Dockerfile" ]]; then
         dockerfile_dir="$PWD/docker"
+        build_context="$PWD"
         _log "Using local docker/Dockerfile"
     else
-        _log "No local Dockerfile found, fetching from GitHub..."
+        _log "Fetching sources from GitHub..."
         local tmpdir
         tmpdir=$(mktemp -d)
-        curl -fsSL "https://raw.githubusercontent.com/robchrob/multitui/$REMOTE_BRANCH/docker/Dockerfile" -o "$tmpdir/Dockerfile" || _err "Failed to fetch Dockerfile"
-        dockerfile_dir="$tmpdir"
+        curl -fsSL "https://github.com/$UPSTREAM/archive/refs/heads/$UPSTREAM_BRANCH.tar.gz" \
+            | tar xz -C "$tmpdir" --strip-components=1 \
+            || _err "Failed to fetch upstream sources"
+        dockerfile_dir="$tmpdir/docker"
+        build_context="$tmpdir"
     fi
 
     local build_args=(
@@ -288,6 +227,7 @@ cmd_build() {
                 no_cache="--no-cache"
             else
                 _log "OpenCode v$current_version is up-to-date. skipping build."
+                [[ "$build_context" == /tmp/* ]] && rm -rf "$build_context"
                 return 0
             fi
         fi
@@ -299,10 +239,10 @@ cmd_build() {
     docker build $no_cache \
         "${build_args[@]}" \
         -f "$dockerfile_dir/Dockerfile" \
-        -t multitui "$dockerfile_dir"
+        -t multitui "$build_context"
 
-    if [[ "$dockerfile_dir" == /tmp/* ]]; then
-        rm -rf "$(dirname "$dockerfile_dir")"
+    if [[ "$build_context" == /tmp/* ]]; then
+        rm -rf "$build_context"
     fi
 
     echo -e "${C_GREEN}[✔] Build complete.${C_RESET}"
@@ -315,10 +255,8 @@ cmd_init() {
 
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
-    _attach
-
-    local template_file="agent/prompts/init.md"
-    [[ -r "$template_file" ]] || _err "Missing prompt: $template_file"
+    local template_file
+    template_file="$(_prompt_file init.md)"
 
     _run_opencode "$(_render_template "$template_file" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
@@ -331,17 +269,13 @@ cmd_bootstrap() {
 
     docker images -q multitui | grep -q . || _err "No multitui image. Run 'mtui build' first."
 
-    _log "Step 1/3: Attaching agent..."
-    _attach
-
-    _log "Step 2/3: Rendering prompt..."
-    local template_file="agent/prompts/bootstrap.md"
-    [[ -r "$template_file" ]] || _err "Missing prompt: $template_file"
+    local template_file
+    template_file="$(_prompt_file bootstrap.md)"
 
     local template_content
     template_content="$(_render_template "$template_file" "PROJECT_NAME=$name" "USER_INSTRUCTION=$instr")"
 
-    _log "Step 3/3: Running OpenCode analysis..."
+    _log "Running OpenCode analysis..."
     _run_opencode "$template_content"
 
     echo -e "${C_GREEN}[✔] Done. Run 'mtui start'.${C_RESET}"
@@ -352,7 +286,7 @@ cmd_start() {
         _err "Set at least one of OPENROUTER_API_KEY, ZAI_API_KEY or OPENCODEGO_API_KEY."
     fi
 
-    local cn mode no_attach=0
+    local cn mode
     cn="$(_container_name)"
     mode="opencode"
     local port_args=()
@@ -361,10 +295,6 @@ cmd_start() {
         case "$1" in
             --tty)
                 mode="tty"
-                shift
-                ;;
-            --no-attach)
-                no_attach=1
                 shift
                 ;;
             -p|--port)
@@ -379,15 +309,6 @@ cmd_start() {
                 ;;
         esac
     done
-
-    if [[ ! -d "agent" ]]; then
-        if [[ "$no_attach" -eq 1 ]]; then
-            _log "Starting without agent/ (using global config)..."
-        else
-            _log "Agent missing, attaching..."
-            _attach
-        fi
-    fi
 
     docker images -q multitui | grep -q . || _err "No image. Run 'mtui build' first."
 
@@ -452,22 +373,15 @@ cmd_list() {
 cmd_status() {
     echo -e "${C_BOLD}Project Directory:${C_RESET}  $PWD"
 
-    if [[ -d "agent" ]]; then
-        local agent_branch
-        agent_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
-
-        if [[ -f ".mtui-branch" ]]; then
-            echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch, tracking in .mtui-branch)"
-        else
-            echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_GREEN}Attached${C_RESET} (branch: $agent_branch)"
-        fi
-    else
-        echo -e "${C_BOLD}Agent Directory:${C_RESET}     ${C_RED}Missing${C_RESET} (Run mtui init)"
+    local cfg_src="image-baked (/workspace/.opencode)"
+    if [[ -f "$PWD/.multitui/opencode.json" ]]; then
+        cfg_src="$PWD/.multitui/opencode.json (project)"
+    elif [[ -f "$PWD/opencode.json" ]]; then
+        cfg_src="$PWD/opencode.json (project)"
+    elif [[ -f "$MTUI_HOME/defaults/opencode.json" ]]; then
+        cfg_src="$MTUI_HOME/defaults/opencode.json (global)"
     fi
-
-    [[ -f ".mtui-branch" ]] && \
-        echo -e "${C_BOLD}Project Branch:${C_RESET}    $(cat .mtui-branch)" || \
-        echo -e "${C_BOLD}Project Branch:${C_RESET}    $REMOTE_BRANCH (default)"
+    echo -e "${C_BOLD}Config Source:${C_RESET}    $cfg_src"
 
     local c_state
     c_state="$(docker inspect -f '{{.State.Status}}' "$(_container_name)" 2>/dev/null || echo 'Not Created')"
@@ -481,171 +395,23 @@ cmd_status() {
     fi
 }
 
-cmd_branch_create() {
-    local branch_name
-    branch_name="$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')"
-    branch_name="${REMOTE_BRANCH}-${branch_name}"
-
-    _log "Creating project branch: $branch_name..."
-
-    if [[ ! -d "agent" ]]; then
-        _log "Attaching agent ($REMOTE_BRANCH) first..."
-        _attach
-    fi
-
-    local current_branch
-    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null)"
-
-    # If not on base branch, switch to base branch first
-    if [[ "$current_branch" != "$REMOTE_BRANCH" ]]; then
-        _log "Switching from $current_branch to $REMOTE_BRANCH..."
-        git -C agent fetch origin -q 2>/dev/null || true
-        git -C agent checkout -q "$REMOTE_BRANCH" 2>/dev/null || \
-            git -C agent checkout -b "$REMOTE_BRANCH" origin/"$REMOTE_BRANCH" -q 2>/dev/null || true
-    fi
-
-    # Now create/tracking the project branch
-    git -C agent fetch origin -q 2>/dev/null || true
-
-    # Check if branch already exists remotely
-    if git -C agent rev-parse "origin/$branch_name" >/dev/null 2>&1; then
-        _log "Branch $branch_name exists remotely, tracking it..."
-        git -C agent checkout -q "$branch_name" 2>/dev/null || \
-            git -C agent checkout -b "$branch_name" -t origin/"$branch_name" -q
-    else
-        git -C agent checkout -b "$branch_name" 2>/dev/null || \
-            git -C agent checkout -q "$branch_name" 2>/dev/null || \
-            _err "Branch $branch_name already exists locally. Delete it first or check it out manually."
-        git -C agent push -u origin "$branch_name" 2>/dev/null || _err "Failed to push branch to remote"
-    fi
-
-    echo "$branch_name" > .mtui-branch
-    _log "Wrote .mtui-branch"
-
-    if [[ -d ".git" ]]; then
-        if ! grep -qxF ".mtui-branch" .gitignore 2>/dev/null; then
-            echo ".mtui-branch" >> .gitignore
-        fi
-        git add .mtui-branch 2>/dev/null || true
-        git commit -m "Add .mtui-branch for project branch tracking" 2>/dev/null || true
-        _log "Committed .mtui-branch to project repo"
-    fi
-
-    echo -e "${C_GREEN}[✔] Branch $branch_name created and tracked.${C_RESET}"
-    _log "Run 'mtui update' to sync with $REMOTE_BRANCH"
-}
-
-cmd_branch_status() {
-    if [[ -d "agent" ]]; then
-        local current_branch ahead behind
-        current_branch="$(git -C agent rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
-
-        git -C agent fetch origin -q 2>/dev/null || true
-
-        local base_branch="$REMOTE_BRANCH"
-        if [[ -f ".mtui-branch" ]]; then
-            base_branch="$(cat .mtui-branch)"
-        fi
-
-        if [[ "$current_branch" != "$REMOTE_BRANCH" ]]; then
-            local revs_ahead behind
-            ahead="$(git -C agent rev-list --count "origin/$REMOTE_BRANCH".."$current_branch" 2>/dev/null || echo '?')"
-            behind="$(git -C agent rev-list --count "$current_branch"..origin/"$REMOTE_BRANCH" 2>/dev/null || echo '?')"
-
-            echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch"
-            echo -e "${C_BOLD}Base branch:${C_RESET}    $REMOTE_BRANCH"
-            echo -e "${C_BOLD}Ahead of $REMOTE_BRANCH:${C_RESET} $ahead commits"
-            echo -e "${C_BOLD}Behind $REMOTE_BRANCH:${C_RESET} $behind commits"
-        else
-            echo -e "${C_BOLD}Current branch:${C_RESET} $current_branch (tracking $REMOTE_BRANCH)"
-            echo -e "${C_BOLD}Status:${C_RESET} Up to date with $REMOTE_BRANCH"
-        fi
-
-        local last_fetch
-        last_fetch="$(git -C agent log -1 --format='%ci' origin/$REMOTE_BRANCH 2>/dev/null | cut -d' ' -f1,2 | cut -d'T' -f1 || echo 'unknown')"
-        echo -e "${C_BOLD}Last updated:${C_RESET} $last_fetch"
-    else
-        _err "Agent not attached. Run 'mtui init' or 'mtui branch create' first."
-    fi
-}
-
-cmd_update() {
-    if [[ ! -d "agent" ]]; then
-        _err "Agent not attached. Run 'mtui init' or 'mtui branch create' first."
-    fi
-
-    # Check for rebase in agent directory (not current dir)
-    if [[ -f "agent/.git/rebase-merge" ]] || [[ -d "agent/.git/rebase-merge" ]]; then
-        _log "Rebase in progress, continuing..."
-        git -C agent rebase --continue 2>/dev/null || _err "Rebase failed. Resolve conflicts manually in agent/"
-        echo -e "${C_GREEN}[✔] Rebase completed.${C_RESET}"
-        return 0
-    fi
-
-    local current_branch
-    current_branch="$(git -C agent rev-parse --abbrev-ref HEAD)"
-
-    # If on base branch, just pull updates (no .mtui-branch needed)
-    if [[ "$current_branch" == "$REMOTE_BRANCH" ]]; then
-        _log "Updating $REMOTE_BRANCH branch..."
-        git -C agent fetch origin "$REMOTE_BRANCH" -q || _err "Failed to fetch $REMOTE_BRANCH"
-        git -C agent reset --hard "origin/$REMOTE_BRANCH" -q || _err "Failed to update $REMOTE_BRANCH"
-        echo -e "${C_GREEN}[✔] Updated $REMOTE_BRANCH to latest.${C_RESET}"
-        return 0
-    fi
-
-    # Not on base branch: look for .mtui-branch file
-    if [[ ! -f ".mtui-branch" ]]; then
-        _err "No .mtui-branch file. Run 'mtui branch create' first."
-    fi
-
-    local branch
-    branch="$(cat .mtui-branch)"
-
-    _log "Updating $branch from $REMOTE_BRANCH..."
-
-    git -C agent fetch origin -q || _err "Failed to fetch from origin"
-    git -C agent fetch origin "$REMOTE_BRANCH" -q || _err "Failed to fetch $REMOTE_BRANCH"
-    git -C agent fetch origin "$branch" -q || true
-
-    if [[ "$current_branch" != "$branch" ]]; then
-        git -C agent checkout -q "$branch" || _err "Failed to checkout $branch"
-    fi
-
-    if git -C agent rebase "origin/$REMOTE_BRANCH" 2>&1; then
-        git -C agent push -f origin "$branch" 2>/dev/null || _warn "Could not push (may not have permission)"
-        echo -e "${C_GREEN}[✔] Updated $branch to latest $REMOTE_BRANCH.${C_RESET}"
-    else
-        _warn "Rebase conflicts detected in agent/"
-        _log "Resolve conflicts in agent/, then run 'mtui update --continue'"
-        return 1
-    fi
-}
-
 show_help() {
-    echo -e "${C_BOLD}MultiTUI (mtui ${MTUI_VERSION})${C_RESET} — OpenCode Docker Orchestrator"
+    echo -e "${C_BOLD}mtui (${MTUI_VERSION})${C_RESET} — OpenCode Docker Runner"
     echo "Usage: mtui <command> [args]"
     echo ""
     echo -e "${C_BOLD}Global Commands:${C_RESET}"
-    echo "  setup                     Install or update mtui binary"
+    echo "  setup                     Install or update mtui binary + global defaults"
     echo "  build [--no-cache]        Build or update the 'multitui' base Docker image"
-    echo "  list, ls                  List all MultiTUI containers on this machine"
+    echo "  list, ls                  List all mtui containers on this machine"
     echo ""
     echo -e "${C_BOLD}Project Commands:${C_RESET}"
-    echo "  init [instruction]        Scaffold new project, attach agent/, AI generates files"
-    echo "  bootstrap [instruction]   Analyze existing codebase and configure MultiTUI"
-    echo "  start [--tty] [--no-attach] [-p H:C]"
-    echo "                          Start or resume OpenCode container for this project"
+    echo "  init [instruction]        Scaffold new project, AI generates files"
+    echo "  bootstrap [instruction]   Analyze existing codebase and configure"
+    echo "  start [--tty] [-p H:C]    Start or resume OpenCode container for this project"
     echo "                            --tty       Drop into bash shell instead of OpenCode"
-    echo "                            --no-attach Skip agent/ clone; use global config (~/.multitui/defaults)"
     echo "                            -p H:C      Expose additional port (set at creation)"
     echo "  stop, clean               Stop and remove the container for this project"
     echo "  status                    Show health and status of current project's setup"
-    echo ""
-    echo -e "${C_BOLD}Branch Commands:${C_RESET}"
-    echo "  branch create             Create and track a project-specific branch"
-    echo "  branch status             Show branch info and divergence from $REMOTE_BRANCH"
-    echo "  update [--continue]      Rebase project branch onto latest $REMOTE_BRANCH"
     echo ""
     echo -e "${C_DIM}Run 'mtui <command> --help' for more info on a command.${C_RESET}"
 }
@@ -667,7 +433,6 @@ case "$COMMAND" in
         cmd_build "$@"
         ;;
     init|bootstrap)
-        _warn_no_agent
         case "$COMMAND" in
             init)      cmd_init "$@" ;;
             bootstrap) cmd_bootstrap "$@" ;;
@@ -684,18 +449,6 @@ case "$COMMAND" in
         ;;
     status)
         cmd_status
-        ;;
-    branch)
-        case "${1:-}" in
-            create)   cmd_branch_create "$@" ;;
-            status)   cmd_branch_status "$@" ;;
-            *)        _err "Unknown branch command: ${1:-}
-Run 'mtui branch create' or 'mtui branch status'"
-            ;;
-        esac
-        ;;
-    update)
-        cmd_update "$@"
         ;;
     -v|--version|version)
         echo "MultiTUI $MTUI_VERSION"

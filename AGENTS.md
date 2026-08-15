@@ -1,8 +1,7 @@
 # MultiTUI — Execution Environment
-> DEVMODE=local development execution of framework (no inside other project in agent/)
-    THEN: STOP and read AGENTS_DEV.md as you are in development mode!
-> IF framework cloned at `$PROJECT_ROOT/agent/`.
-    THEN: continue
+> This is the execution environment contract for the OpenCode agent running
+> inside the `multitui` container. If you are developing MultiTUI itself,
+> STOP and read AGENTS_DEV.md first.
 
 ## Execution Layers
 ```
@@ -22,7 +21,7 @@ So the "multitui container" (where I'm running) is itself inside Docker, and it 
 
 ## Project Dockerfile
 Location: `$PROJECT_ROOT/Dockerfile` — defines dev runtime for THIS project.
-Created by OpenCode during init/bootstrap. Never lives in `agent/`.
+Created by OpenCode during init/bootstrap. Never lives in the multitui image.
 
 ## MCP Servers (always available)
 
@@ -72,7 +71,7 @@ Ask: "Find MCP servers for [use case]" — returns install commands and config.
 No API key required. Use to discover new tools for any workflow need.
 
 ## Rules
-- `agent/` is READ-ONLY (cloned, not a submodule)
+- Configuration comes from the active config source (project-local → `~/.multitui/defaults` → image-baked); `mtui status` reports which one is active
 - Dockerfiles, compose files → project root
 - Spawned container ports bind to HOST
 - Container state outside `$PROJECT_ROOT` is ephemeral
