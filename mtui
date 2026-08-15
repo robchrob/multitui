@@ -7,7 +7,7 @@ MTUI_VERSION="0.2.1"
 MTUI_HOME="$HOME/.multitui"
 REMOTE_REPO="${MTUI_REMOTE:-git@github.com:robchrob/multitui.git}"
 REMOTE_BRANCH="${MTUI_BRANCH:-develop}"
-OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-openrouter/stepfun/step-3.5-flash:free}"
+OPENCODE_DEFAULT_MODEL="${MTUI_MODEL:-opencode/deepseek-v4-flash-free}"
 
 # --- Colors & Helpers ---
 C_RESET='\033[0m'
@@ -348,7 +348,9 @@ cmd_bootstrap() {
 }
 
 cmd_start() {
-    [[ -n "${OPENROUTER_API_KEY:-}" ]] || _err "OPENROUTER_API_KEY not set."
+    if [[ -z "${OPENROUTER_API_KEY:-}" && -z "${ZAI_API_KEY:-}" && -z "${OPENCODEGO_API_KEY:-}" ]]; then
+        _err "Set at least one of OPENROUTER_API_KEY, ZAI_API_KEY or OPENCODEGO_API_KEY."
+    fi
 
     local cn mode no_attach=0
     cn="$(_container_name)"

@@ -5,8 +5,8 @@ FROM alpine:3.24.1
 ARG HOST_UID=1000
 ARG HOST_GID=1000
 
-ENV DOCKER_VERSION=29.6.1
-ENV DOCKER_COMPOSE_VERSION=5.3.1
+ENV DOCKER_VERSION=29.7.2
+ENV DOCKER_COMPOSE_VERSION=5.4.0
 
 RUN apk add --no-cache \
     nodejs \
@@ -55,6 +55,9 @@ RUN if [ -n "$OPENCODE_VERSION" ]; then \
     npm install -g \
       @modelcontextprotocol/server-memory \
       @modelcontextprotocol/server-sequential-thinking
+
+# Pre-fetch the model catalog so first-run sessions resolve models immediately
+RUN opencode models --refresh || true
 
 RUN hash -r
 

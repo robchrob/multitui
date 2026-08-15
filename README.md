@@ -12,8 +12,8 @@ Run OpenCode AI in per-project Docker containers. No local installs—just Docke
 | **Any stack, one image** | Node, Python, Go, Rust, Ruby, PHP, Shell, C/C++—all via Docker exec |
 | **Adaptive bootstrap** | Preserves existing config, adds MultiTUI on top |
 | **Background containers** | `mtui start` spawns long-lived per-project container |
-| **Plugin ecosystem** | Quota tracking, GLM quota, rate-limit retry via OpenCode plugins |
-| **MCP built-in** | memory, sequential-thinking, context7, exa, deepwiki, filesystem, a2a-search |
+| **Plugin ecosystem** | oh-my-openagent (autonomous mode + model fallback), opencode-ensemble (ensemble routing) |
+| **MCP built-in** | memory, sequential-thinking, context7, exa, deepwiki, filesystem, a2a-search, playwright |
 | **Skills & commands** | Reusable AI templates in `agent/defaults/` for Docker, versioning, debugging |
 | **Magic versioning** | Narrative-first semver 2.0 with `plan.md` (design doc) + `tasks.md` (live tracker) + `changelog.md` |
 | **Dynamic branch workflow** | Configurable base branch via `MTUI_BRANCH` with auto-rebase for agent customization |
@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/robchrob/multitui/develop/mtui -o .
 chmod +x ./mtui && ./mtui setup
 ```
 
-**Requires**: Docker daemon, `OPENROUTER_API_KEY`. Optional: `EXA_API_KEY`, `ZAI_API_KEY`.
+**Requires**: Docker daemon, one of `OPENROUTER_API_KEY`, `ZAI_API_KEY` or `OPENCODEGO_API_KEY`. Optional: `EXA_API_KEY`.
 
 ---
 
@@ -60,7 +60,7 @@ Container persists. Detach with `Ctrl+C`, reattach with `mtui start`.
 | `mtui build [--no-cache]` | Rebuild image |
 | `mtui init "<desc>"` | Scaffold new project with AI |
 | `mtui bootstrap "<desc>"` | Configure existing project |
-| `mtui start [--tty] [-p H:C]` | Run OpenCode container |
+| `mtui start [--tty] [--no-attach] [-p H:C]` | Run OpenCode container |
 | `mtui clean` | Stop and remove container |
 | `mtui ls` | List all `mtui-*` containers |
 | `mtui status` | Show project health |
@@ -84,12 +84,13 @@ cp ./mtui_completion.bash /etc/bash_completion.d/mtui
 ### Environment Variables
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OPENROUTER_API_KEY` | *required* | OpenCode AI backend |
+| `OPENROUTER_API_KEY` | *one required* | OpenRouter provider / free fallbacks |
 | `MTUI_REMOTE` | `git@github.com:robchrob/multitui.git` | Agent repo (set to fork for branching) |
 | `MTUI_BRANCH` | `develop` | Base branch for agent tracking |
-| `MTUI_MODEL` | `openrouter/stepfun/step-3.5-flash:free` | OpenCode model |
+| `MTUI_MODEL` | `opencode/deepseek-v4-flash-free` | OpenCode model |
 | `EXA_API_KEY` | optional | Exa web search MCP |
-| `ZAI_API_KEY` | optional | Z.AI Coding Plan provider |
+| `ZAI_API_KEY` | *one required* | Z.AI Coding Plan provider (GLM-5.3) |
+| `OPENCODEGO_API_KEY` | *one required* | OpenCode Go provider |
 
 ### Key Files
 | File | Purpose |
@@ -104,9 +105,8 @@ cp ./mtui_completion.bash /etc/bash_completion.d/mtui
 ### Plugins
 | Plugin | Purpose |
 |--------|---------|
-| `@slkiser/opencode-quota` | Token/budget tracking for AI sessions |
-| `@guyinwonder168/opencode-glm-quota` | GLM quota diagnostics |
-| `@bdliyq/opencode-rate-limit-retry` | Automatic retry on API rate limits |
+| `@code-yeongyu/oh-my-openagent` | Autonomous mode: task orchestration, model fallback chains on API errors |
+| `@hueyexe/opencode-ensemble` | Ensemble routing across configured providers |
 
 ---
 
